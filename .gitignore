@@ -1,0 +1,47 @@
+# Java build outputs
+/out/
+/**/*.class
+*.class
+*.jar
+*.war
+*.ear
+
+# Specific project output
+/EcosystemSimulation/out/
+EcosystemSimulation.casc
+
+# Build folders
+/build/
+/bin/
+/target/
+
+# IDE files
+/.idea/
+/.vscode/
+*.iml
+/.classpath
+/.project
+/.settings/
+
+# OS files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+
+# Node
+/node_modules/
+
+# Python caches (leftovers)
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Logs
+*.log
+logs/
+
+# Misc
+*.zip
+*.tmp
+*.bak
+.env
