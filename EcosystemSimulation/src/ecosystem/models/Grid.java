@@ -60,6 +60,13 @@ public class Grid {
         return ret;
     }
 
+    /**
+     * Return all organisms currently on the grid (live list reference may change after steps).
+     */
+    public List<Organism> getOrganisms() {
+        return organisms;
+    }
+
     public boolean isCellEmpty(int x, int y) { return organismsAt(x, y).isEmpty(); }
 
     public List<int[]> getNeighborPositions(int x, int y) {

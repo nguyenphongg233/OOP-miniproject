@@ -76,7 +76,7 @@ public class MainMenu {
 
         root.getChildren().add(menuBox);
 
-        Scene scene = new Scene(root, 600, 420);
+        Scene scene = new Scene(root, 1300, 700);
         // Responsive: menuBox always center, buttons scale with window
         scene.widthProperty().addListener((obs, oldV, newV) -> {
             double w = newV.doubleValue();

@@ -1,7 +1,24 @@
 
 package ecosystem.models;
 
+import java.util.concurrent.atomic.AtomicInteger;
+
 public abstract class Organism {
+    private static final AtomicInteger NEXT_ID = new AtomicInteger(1);
+
+    private final int id;
+
+    public int getId() { return id; }
+
+    /**
+     * Return a human-friendly ID with a type prefix and zero-padded numeric suffix.
+     * Examples: Plant -> P000001, Herbivore -> H000012, Carnivore -> C000123
+     */
+    public String getLabelId() {
+        // Return numeric-only zero-padded ID (8 digits), e.g. 00000001
+        return String.format("%08d", id);
+    }
+
     public int getAge() {
         return age;
     }
@@ -12,6 +29,7 @@ public abstract class Organism {
     protected int age;
 
     public Organism(int x, int y, int energy) {
+        this.id = NEXT_ID.getAndIncrement();
         this.x = x;
         this.y = y;
         this.energy = energy;

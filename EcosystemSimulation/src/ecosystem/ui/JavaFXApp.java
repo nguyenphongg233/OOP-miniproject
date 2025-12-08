@@ -1,5 +1,3 @@
-// import javafx.scene.image.ImageView; // not needed
-// import javafx.stage.FileChooser; // not needed
 package ecosystem.ui;
 
 import javafx.geometry.Pos;
@@ -13,6 +11,10 @@ import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.control.*;
 import javafx.scene.layout.Background;
 import javafx.scene.layout.BackgroundFill;
+import javafx.scene.layout.BackgroundImage;
+import javafx.scene.layout.BackgroundPosition;
+import javafx.scene.layout.BackgroundRepeat;
+import javafx.scene.layout.BackgroundSize;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.CornerRadii;
 import javafx.scene.layout.HBox;
@@ -28,9 +30,11 @@ import ecosystem.models.Organism;
 import javafx.scene.image.Image;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import javafx.beans.binding.Bindings;
+import javafx.beans.property.IntegerProperty;
+import javafx.beans.property.SimpleIntegerProperty;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Stack;
 
 public class JavaFXApp extends Application {
 
@@ -42,9 +46,14 @@ public class JavaFXApp extends Application {
     private Scene menuScene;
     private Scene simulationScene;
     private Canvas canvas;
+    private Canvas overviewCanvas;
+    private IntegerProperty overviewGridW = new SimpleIntegerProperty(0);
+    private IntegerProperty overviewGridH = new SimpleIntegerProperty(0);
     private Label statsLabel;
+    private ListView<Organism> orgListView;
+    private SelectedOrganism selectedTracker;
     private Map<String, Image> iconMap = new HashMap<>();
-    private Image gridBackgroundImage = null;
+    private Image gridBackgroundImage = null, simRootBackgroundImage = null;
     private boolean useImageBackground = false;
     // For property panel
     private Label detailLabel;
@@ -53,20 +62,70 @@ public class JavaFXApp extends Application {
 
     @Override
     public void start(Stage primaryStage) {
-        // Load grid background image if exists
-        Path bgPath = Path.of("EcosystemSimulation", "icons", "grid_background.png");
-        if (Files.exists(bgPath)) {
-            try {
-                gridBackgroundImage = new Image(bgPath.toUri().toString());
-            } catch (Exception ex) { gridBackgroundImage = null; }
-        }
-
-        // Khung layout mới
         settings = new Settings();
         engine = new SimulationEngine(settings);
+        // selection tracker centralizes selection-by-id
+        selectedTracker = new SelectedOrganism();
         loadIcons();
 
         // MenuBar (Top)
+        MenuBar menuBar = createMenuBar();
+        // Left: Overview + TreeView
+        VBox leftPanel = OverviewPanel();
+        // Center: Canvas lớn
+        canvas = new Canvas(engine.grid.getWidth() * cellSize, engine.grid.getHeight() * cellSize);
+        drawGrid();
+
+        // Right panel and control panel are created by helper methods
+        VBox rightPanel = createRightPanel();
+        HBox controls = createControlPanel(primaryStage);
+
+        // BorderPane layout
+        BorderPane simRoot = new BorderPane();
+        simRoot.setBackground(new Background(new BackgroundFill(
+                Color.BEIGE, CornerRadii.EMPTY, Insets.EMPTY
+        )));
+        simRoot.setTop(menuBar);
+        simRoot.setLeft(leftPanel);
+        simRoot.setRight(rightPanel);
+        BorderPane bottomPane = new BorderPane();
+        bottomPane.setCenter(canvas);
+        bottomPane.setBottom(controls);
+        
+        simRoot.setCenter(bottomPane);
+        // If a grid background image was loaded earlier, use it; otherwise keep the plain BEIGE background
+        
+        
+        if (simRootBackgroundImage != null) {
+            BackgroundImage bgImg = new BackgroundImage(
+                simRootBackgroundImage,
+                BackgroundRepeat.NO_REPEAT,
+                BackgroundRepeat.NO_REPEAT,
+                BackgroundPosition.CENTER,
+                new BackgroundSize(1.0, 1.0, true, true, false, true)
+            );
+            System.out.println("Using simulation background image");
+            simRoot.setBackground(new Background(bgImg));
+        } else {
+            simRoot.setBackground(new Background(new BackgroundFill(
+                    Color.BLANCHEDALMOND, CornerRadii.EMPTY, Insets.EMPTY
+            )));
+        }
+
+        simulationScene = new Scene(simRoot, 1300, 700);
+
+        // --- Menu Scene ---
+        MainMenu menu = new MainMenu(primaryStage,
+            () -> {
+                primaryStage.setScene(simulationScene);
+                primaryStage.setTitle("Ecosystem Simulation (JavaFX)");
+            },
+            () -> openSettingsDialog(primaryStage, statsLabel)
+        );
+        menu.show();
+        menuScene = primaryStage.getScene();
+    }
+    private MenuBar createMenuBar() {
         MenuBar menuBar = new MenuBar();
         Menu menuFile = new Menu("File");
         Menu menuWorld = new Menu("World");
@@ -87,20 +146,40 @@ public class JavaFXApp extends Application {
         }
         menuView.getItems().addAll(bgImgItem, bgColorItem);
         menuBar.getMenus().addAll(menuFile, menuWorld, menuView, menuHelp);
-        bgImgItem.setOnAction(e -> { useImageBackground = true; drawGrid(); });
-        bgColorItem.setOnAction(e -> { useImageBackground = false; drawGrid(); });
-
-        // Left: Overview + TreeView
+        bgImgItem.setOnAction(e -> {
+            useImageBackground = true;
+            drawGrid();
+        });
+        bgColorItem.setOnAction(e -> {
+            useImageBackground = false;
+            drawGrid();
+        });
+        return menuBar;
+    }
+    private VBox OverviewPanel() {
         VBox leftPanel = new VBox(10);
         leftPanel.setPadding(new Insets(8));
         leftPanel.setPrefWidth(180);
-        Canvas overviewCanvas = new Canvas(120, 120);
+        // Overview canvas: bind its width to left panel and height to maintain grid aspect ratio
+        overviewCanvas = new Canvas(160, 160);
+        overviewCanvas.widthProperty().bind(leftPanel.widthProperty().subtract(16));
+        // Bind height = width * (gridHeight / gridWidth)
+        overviewCanvas.heightProperty().bind(Bindings.createDoubleBinding(() -> {
+            double w = overviewCanvas.getWidth();
+            int gw = Math.max(1, overviewGridW.get());
+            int gh = Math.max(1, overviewGridH.get());
+            return w * ((double) gh / (double) gw);
+        }, overviewCanvas.widthProperty(), overviewGridW, overviewGridH));
         overviewCanvas.getGraphicsContext2D().setFill(Color.LIGHTGRAY);
-        overviewCanvas.getGraphicsContext2D().fillRect(0, 0, 120, 120);
+        overviewCanvas.getGraphicsContext2D().fillRect(0, 0, 160, 160);
+        // Redraw overview when size changes
+        overviewCanvas.widthProperty().addListener((o, oldV, newV) -> drawOverview());
+        overviewCanvas.heightProperty().addListener((o, oldV, newV) -> drawOverview());
         Label overviewLabel = new Label("Overview");
         TreeItem<String> rootItem = new TreeItem<>("Layers");
         TreeItem<String> envItem = new TreeItem<>("Environment");
-        envItem.getChildren().add(new TreeItem<>("Water"));
+     
+
         envItem.getChildren().add(new TreeItem<>("Sunlight"));
         envItem.getChildren().add(new TreeItem<>("Minerals"));
         TreeItem<String> orgItem = new TreeItem<>("Organisms");
@@ -125,178 +204,58 @@ public class JavaFXApp extends Application {
         TreeView<String> treeView = new TreeView<>(rootItem);
         treeView.setShowRoot(true);
         leftPanel.getChildren().addAll(overviewLabel, overviewCanvas, treeView);
-
-        // Center: Canvas lớn
-        canvas = new Canvas(engine.grid.getWidth() * cellSize, engine.grid.getHeight() * cellSize);
-        drawGrid();
-
-        // Right: ListView + Properties
-        VBox rightPanel = new VBox(10);
-        rightPanel.setPadding(new Insets(8));
-        rightPanel.setPrefWidth(220);
-        Label orgListLabel = new Label("Organisms");
-        ListView<String> orgListView = new ListView<>();
-        orgListView.setPrefHeight(120);
-        Label propLabel = new Label("Properties");
-        VBox propBox = new VBox(8);
-        propBox.setStyle("-fx-background-color: #f5f5f5; -fx-padding: 8; -fx-border-radius: 8; -fx-background-radius: 8;");
-        // Property labels
-        Label dayLabel = new Label();
-        Label plantLabel = new Label();
-        Label herbLabel = new Label();
-        Label carnLabel = new Label();
-        Label orgLabel = new Label();
-        detailLabel = new Label("Click a cell to view organism details");
-        detailLabel.setWrapText(true);
-        propBox.getChildren().addAll(dayLabel, plantLabel, herbLabel, carnLabel, orgLabel, new Separator(), detailLabel);
-        rightPanel.getChildren().addAll(orgListLabel, orgListView, propLabel, propBox);
-
-        // Helper to update summary info
-        updateSummary = () -> {
-            java.util.Map<String, Integer> counts = engine.counts();
-            dayLabel.setText("Day: " + engine.getDay() + " (Step: " + engine.getStep() + ")");
-            plantLabel.setText("Plants: " + counts.getOrDefault("Plant", 0));
-            herbLabel.setText("Herbivores: " + counts.getOrDefault("Herbivore", 0));
-            carnLabel.setText("Carnivores: " + counts.getOrDefault("Carnivore", 0));
-            int total = 0;
-            for (int v : counts.values()) total += v;
-            orgLabel.setText("Total Organisms: " + total);
-        };
-        updateSummary.run();
-
-        // Helper to update organism detail info (clears if none selected)
-        updateDetail = () -> {
-            detailLabel.setText("Click a cell to view organism details");
-        };
-
-        // Bottom: Control Panel (EcoSim style)
-        Button startBtn = new Button("Start");
-        Button pauseBtn = new Button("Pause");
-        Button stepBtn = new Button("Step");
-        Button resetBtn = new Button("Reset");
-        Button settingsBtn = new Button("Settings");
-        Button backBtn = new Button("Back to Menu");
-        CheckBox autoResize = new CheckBox("Auto-resize");
-        Slider speed = new Slider(10, 1000, 200);
-        speed.setShowTickLabels(true);
-        speed.setShowTickMarks(true);
-        HBox controls = new HBox(8, startBtn, pauseBtn, stepBtn, resetBtn, settingsBtn, backBtn, autoResize, new Label("Delay ms:"), speed);
-        controls.setPadding(new Insets(8));
-        controls.setStyle("-fx-background-color: #ffffffcc; -fx-background-radius: 16; -fx-effect: dropshadow(gaussian, #b2ebf2, 8, 0.2, 0, 2)");
-        // Style buttons: bo tròn, shadow
-        String btnStyle = "-fx-background-radius: 16; -fx-effect: dropshadow(gaussian, #80deea, 8, 0.3, 0, 2); -fx-font-size: 14px; -fx-padding: 8 20;";
-        startBtn.setStyle(btnStyle);
-        pauseBtn.setStyle(btnStyle);
-        stepBtn.setStyle(btnStyle);
-        resetBtn.setStyle(btnStyle);
-        settingsBtn.setStyle(btnStyle);
-        backBtn.setStyle(btnStyle);
-
-        // BorderPane layout
-        BorderPane simRoot = new BorderPane();
-        simRoot.setBackground(new Background(new BackgroundFill(
-                Color.BEIGE, CornerRadii.EMPTY, Insets.EMPTY
-        )));
-        simRoot.setTop(menuBar);
-        simRoot.setLeft(leftPanel);
-        simRoot.setRight(rightPanel);
-        BorderPane bottomPane = new BorderPane();
-        bottomPane.setCenter(canvas);
-        bottomPane.setBottom(controls);
-        
-        simRoot.setCenter(bottomPane);
-
-        timeline = new Timeline(new KeyFrame(Duration.millis(speed.getValue()), e -> {
-            engine.tick();
-            drawGrid();
-            statsLabel.setText(formatCounts());
-            updateSummary.run();
-            updateDetail.run(); // Clear detail on step
-        }));
-        timeline.setCycleCount(Timeline.INDEFINITE);
-        speed.valueProperty().addListener((obs, oldV, newV) -> timeline.setRate(1000.0 / newV.doubleValue()));
-
-        startBtn.setOnAction(e -> timeline.play());
-        pauseBtn.setOnAction(e -> timeline.pause());
-        stepBtn.setOnAction(e -> {
-            engine.tick();
-            drawGrid();
-            statsLabel.setText(formatCounts());
-            updateSummary.run();
-            updateDetail.run();
-        });
-        resetBtn.setOnAction(e -> {
-            timeline.stop();
-            engine = new SimulationEngine(settings);
-            canvas.setWidth(engine.grid.getWidth() * cellSize);
-            canvas.setHeight(engine.grid.getHeight() * cellSize);
-            drawGrid();
-            statsLabel.setText(formatCounts());
-            updateSummary.run();
-            updateDetail.run();
-        });
-        settingsBtn.setOnAction(e -> openSettingsDialog(primaryStage, statsLabel));
-        backBtn.setOnAction(e -> {
-            timeline.stop();
-            primaryStage.setScene(menuScene);
-            primaryStage.setTitle("Ecosystem Simulation — Main Menu");
-        });
-        canvas.widthProperty().addListener((o, oldV, newV) -> drawGrid());
-        canvas.heightProperty().addListener((o, oldV, newV) -> drawGrid());
-        autoResize.selectedProperty().addListener((obs, oldV, newV) -> {
-            if (newV) {
-                double rightPanelWidth = 220;
-                double bottomPanel = 120;
-                canvas.widthProperty().bind(simRoot.widthProperty().subtract(rightPanelWidth));
-                canvas.heightProperty().bind(simRoot.heightProperty().subtract(bottomPanel));
-            } else {
-                canvas.widthProperty().unbind();
-                canvas.heightProperty().unbind();
-                canvas.setWidth(engine.grid.getWidth() * cellSize);
-                canvas.setHeight(engine.grid.getHeight() * cellSize);
-            }
-            drawGrid();
-        });
-
-        // Handle click on canvas to show organism details
-        canvas.setOnMouseClicked(e -> {
-            int x = (int)(e.getX() / cellSize);
-            int y = (int)(e.getY() / cellSize);
-            if (x >= 0 && x < engine.grid.getWidth() && y >= 0 && y < engine.grid.getHeight()) {
-                java.util.List<Organism> objs = engine.grid.organismsAt(x, y);
-                if (!objs.isEmpty()) {
-                    Organism o = objs.get(0);
-                    StringBuilder sb = new StringBuilder();
-                    sb.append("Type: ").append(o.getType()).append("\n");
-                    sb.append("Position: (").append(o.getX()).append(", ").append(o.getY()).append(")\n");
-                    sb.append("Age: ").append(o.getAge()).append("\n");
-                    sb.append("Energy: ").append(o.getEnergy()).append("\n");
-                    // Add more info if available
-                    sb.append("Alive: ").append(o.isAlive() ? "Yes" : "No").append("\n");
-                    detailLabel.setText(sb.toString());
-                    // Update detail updater to keep this info until next step
-                    updateDetail = () -> detailLabel.setText(sb.toString());
-                } else {
-                    detailLabel.setText("No organism at this cell.");
-                    updateDetail = () -> detailLabel.setText("No organism at this cell.");
-                }
-            }
-        });
-
-        simulationScene = new Scene(simRoot, 900, 700);
-
-        // --- Menu Scene ---
-        MainMenu menu = new MainMenu(primaryStage,
-            () -> {
-                primaryStage.setScene(simulationScene);
-                primaryStage.setTitle("Ecosystem Simulation (JavaFX)");
-            },
-            () -> openSettingsDialog(primaryStage, statsLabel)
-        );
-        menu.show();
-        menuScene = primaryStage.getScene();
+        // Initialize overview grid size from settings and draw
+        overviewGridW.set(settings.gridWidth);
+        overviewGridH.set(settings.gridHeight);
+        drawOverview();
+        return leftPanel;
     }
 
+    /**
+     * Draw a scaled overview of the simulation grid into overviewCanvas.
+     * Colors: Plant = light green, Herbivore = dark gray, Carnivore = black.
+     */
+    private void drawOverview() {
+        if (overviewCanvas == null || engine == null) return;
+        GraphicsContext g = overviewCanvas.getGraphicsContext2D();
+        int cols = engine.grid.getWidth();
+        int rows = engine.grid.getHeight();
+        double w = overviewCanvas.getWidth();
+        double h = overviewCanvas.getHeight();
+        if (w <= 0 || h <= 0 || cols <= 0 || rows <= 0) return;
+        g.setFill(Color.web("#f0f0f0"));
+        g.fillRect(0, 0, w, h);
+        double cellW = w / cols;
+        double cellH = h / rows;
+        // If grid is larger than canvas, we will sample cells to fit
+        double scale = Math.min(cellW, cellH);
+        // compute number of columns/rows to draw based on scale
+        int drawCols = (int)Math.min(cols, Math.max(1, Math.floor(w / scale)));
+        int drawRows = (int)Math.min(rows, Math.max(1, Math.floor(h / scale)));
+        double drawCellW = w / drawCols;
+        double drawCellH = h / drawRows;
+        for (int ry = 0; ry < drawRows; ry++) {
+            for (int rx = 0; rx < drawCols; rx++) {
+                // map draw cell to grid coordinate (sample)
+                int gx = (int)((double)rx * cols / drawCols);
+                int gy = (int)((double)ry * rows / drawRows);
+                java.util.List<Organism> objs = engine.grid.organismsAt(gx, gy);
+                if (objs.isEmpty()) {
+                    // empty cell
+                    g.setFill(Color.web("#e9efe9"));
+                } else {
+                    String type = objs.get(0).getType();
+                    switch (type) {
+                        case "Plant": g.setFill(Color.web("#7fbf7f")); break;
+                        case "Herbivore": g.setFill(Color.DARKGRAY); break;
+                        case "Carnivore": g.setFill(Color.BLACK); break;
+                        default: g.setFill(Color.GRAY); break;
+                    }
+                }
+                g.fillRect(rx * drawCellW, ry * drawCellH, drawCellW, drawCellH);
+            }
+        }
+    }
     private void openSettingsDialog(Stage owner, Label statsLabel) {
         Stage dlg = new Stage();
         dlg.initOwner(owner);
@@ -422,13 +381,194 @@ public class JavaFXApp extends Application {
         engine = new SimulationEngine(settings);
         canvas.setWidth(engine.grid.getWidth() * cellSize);
         canvas.setHeight(engine.grid.getHeight() * cellSize);
+        // Update overview grid bindings first
+        overviewGridW.set(settings.gridWidth);
+        overviewGridH.set(settings.gridHeight);
+        // Refresh summary (which also redraws overview), then draw grid
+        updateSummary.run();
         drawGrid();
         statsLabel.setText(formatCounts());
-        updateSummary.run();
+        drawOverview();
         updateDetail.run();
     }
 
-    // ...existing code...
+    private VBox createRightPanel() {
+        VBox rightPanel = new VBox(10);
+        rightPanel.setPadding(new Insets(8));
+        rightPanel.setPrefWidth(220);
+        Label orgListLabel = new Label("Organisms");
+        orgListView = new ListView<>();
+        orgListView.setPrefHeight(160);
+        orgListView.setPrefWidth(200);
+        // Show Organism label in each cell
+        orgListView.setCellFactory(lv -> new ListCell<Organism>() {
+            @Override protected void updateItem(Organism o, boolean empty) {
+                super.updateItem(o, empty);
+                if (empty || o == null) setText(null);
+                else setText(o.getLabelId());
+            }
+        });
+        orgListView.getSelectionModel().selectedItemProperty().addListener((obs, oldO, newO) -> {
+            if (newO == null) {
+                selectedTracker.clear();
+                drawGrid();
+                return;
+            }
+            selectedTracker.select(newO.getId());
+            drawGrid();
+        });
+        Label propLabel = new Label("Properties");
+        VBox propBox = new VBox(8);
+        propBox.setStyle("-fx-background-color: #f5f5f5; -fx-padding: 8; -fx-border-radius: 8; -fx-background-radius: 8;");
+        Label dayLabel = new Label();
+        Label plantLabel = new Label();
+        Label herbLabel = new Label();
+        Label carnLabel = new Label();
+        Label orgLabel = new Label();
+        detailLabel = new Label("Click a cell to view organism details");
+        detailLabel.setWrapText(true);
+        propBox.getChildren().addAll(dayLabel, plantLabel, herbLabel, carnLabel, orgLabel, new Separator(), detailLabel);
+        rightPanel.getChildren().addAll(orgListLabel, orgListView, propLabel, propBox);
+        updateSummary = () -> {
+            java.util.Map<String, Integer> counts = engine.counts();
+            dayLabel.setText("Day: " + engine.getDay() + " (Step: " + engine.getStep() + ")");
+            plantLabel.setText("Plants: " + counts.getOrDefault("Plant", 0));
+            herbLabel.setText("Herbivores: " + counts.getOrDefault("Herbivore", 0));
+            carnLabel.setText("Carnivores: " + counts.getOrDefault("Carnivore", 0));
+            int total = 0;
+            for (int v : counts.values()) total += v;
+            orgLabel.setText("Total Organisms: " + total);
+            // update overview minimap whenever summary updates
+            drawOverview();
+            // update organisms list (id: type (x,y))
+            if (orgListView != null) {
+                javafx.collections.ObservableList<Organism> items = orgListView.getItems();
+                // replace entire list with current organisms
+                java.util.List<Organism> current = new java.util.ArrayList<>(engine.grid.getOrganisms());
+                // Keep a stable ordering (by id) so selection doesn't jump around when grid reorders
+                current.sort((a, b) -> Integer.compare(a.getId(), b.getId()));
+                items.setAll(current);
+                boolean foundSelected = false;
+                Integer selId = selectedTracker.getSelectedId();
+                if (selId != null) {
+                    for (Organism o : items) if (o.getId() == selId) { foundSelected = true; break; }
+                }
+                // If selected organism no longer exists, clear selection and detail
+                if (!foundSelected && selId != null) {
+                    selectedTracker.clear();
+                    orgListView.getSelectionModel().clearSelection();
+                    detailLabel.setText("Click a cell to view organism details");
+                } else if (foundSelected && selId != null) {
+                    // restore selection to the matching organism object
+                    for (Organism o : items) {
+                        if (o.getId() == selId) {
+                            orgListView.getSelectionModel().select(o);
+                            break;
+                        }
+                    }
+                }
+            }
+        };
+        updateSummary.run();
+        updateDetail = () -> {
+            detailLabel.setText("Click a cell to view organism details");
+        };
+        return rightPanel;
+    }
+
+    private HBox createControlPanel(Stage primaryStage) {
+        Button startBtn = new Button("Start");
+        Button pauseBtn = new Button("Pause");
+        Button stepBtn = new Button("Step");
+        Button resetBtn = new Button("Reset");
+        Button settingsBtn = new Button("Settings");
+        Button backBtn = new Button("Back to Menu");
+        Slider speed = new Slider(10, 1000, 200);
+        speed.setShowTickLabels(true);
+        speed.setShowTickMarks(true);
+        statsLabel = new Label(formatCounts());
+        HBox controls = new HBox(8, startBtn, pauseBtn, stepBtn, resetBtn, settingsBtn, backBtn, new Label("Delay ms:"), speed);
+        controls.setPadding(new Insets(8));
+        controls.setStyle("-fx-background-color: #ffffffcc; -fx-background-radius: 16; -fx-effect: dropshadow(gaussian, #b2ebf2, 8, 0.2, 0, 2)");
+        String btnStyle = "-fx-background-radius: 16; -fx-effect: dropshadow(gaussian, #80deea, 8, 0.3, 0, 2); -fx-font-size: 14px; -fx-padding: 8 20;";
+        startBtn.setStyle(btnStyle);
+        pauseBtn.setStyle(btnStyle);
+        stepBtn.setStyle(btnStyle);
+        resetBtn.setStyle(btnStyle);
+        settingsBtn.setStyle(btnStyle);
+        backBtn.setStyle(btnStyle);
+        timeline = new Timeline(new KeyFrame(Duration.millis(speed.getValue()), e -> {
+            engine.tick();
+            updateSummary.run();
+            drawGrid();
+            statsLabel.setText(formatCounts());
+            updateDetail.run();
+        }));
+        timeline.setCycleCount(Timeline.INDEFINITE);
+        speed.valueProperty().addListener((obs, oldV, newV) -> timeline.setRate(1000.0 / newV.doubleValue()));
+        startBtn.setOnAction(e -> timeline.play());
+        pauseBtn.setOnAction(e -> timeline.pause());
+        stepBtn.setOnAction(e -> {
+            engine.tick();
+            updateSummary.run();
+            drawGrid();
+            statsLabel.setText(formatCounts());
+            updateDetail.run();
+        });
+        resetBtn.setOnAction(e -> {
+            timeline.stop();
+            engine = new SimulationEngine(settings);
+            canvas.setWidth(engine.grid.getWidth() * cellSize);
+            canvas.setHeight(engine.grid.getHeight() * cellSize);
+            updateSummary.run();
+            drawGrid();
+            statsLabel.setText(formatCounts());
+            updateDetail.run();
+        });
+        settingsBtn.setOnAction(e -> openSettingsDialog(primaryStage, statsLabel));
+        backBtn.setOnAction(e -> {
+            timeline.stop();
+            primaryStage.setScene(menuScene);
+            primaryStage.setTitle("Ecosystem Simulation — Main Menu");
+        });
+        canvas.widthProperty().addListener((o, oldV, newV) -> drawGrid());
+        canvas.heightProperty().addListener((o, oldV, newV) -> drawGrid());
+        canvas.setOnMouseClicked(e -> {
+            // compute grid coords using current canvas scale (not fixed cellSize)
+            int cols = engine.grid.getWidth();
+            int rows = engine.grid.getHeight();
+            double cellW = canvas.getWidth() / (double) Math.max(1, cols);
+            double cellH = canvas.getHeight() / (double) Math.max(1, rows);
+            int gx = (int) Math.floor(e.getX() / cellW);
+            int gy = (int) Math.floor(e.getY() / cellH);
+            if (gx >= 0 && gx < cols && gy >= 0 && gy < rows) {
+                java.util.List<Organism> objs = engine.grid.organismsAt(gx, gy);
+                if (!objs.isEmpty()) {
+                    // select the top organism at the clicked cell
+                    Organism o = objs.get(0);
+                    selectedTracker.select(o.getId());
+                    // select and focus the matching item in the list so behavior matches panel selection
+                    if (orgListView != null) {
+                        for (Organism item : orgListView.getItems()) {
+                            if (item.getId() == o.getId()) {
+                                orgListView.getSelectionModel().select(item);
+                                orgListView.scrollTo(item);
+                                orgListView.requestFocus();
+                                break;
+                            }
+                        }
+                    }
+                    drawGrid();
+                } else {
+                    // click on empty cell -> clear selection
+                    selectedTracker.clear();
+                    if (orgListView != null) orgListView.getSelectionModel().clearSelection();
+                    drawGrid();
+                }
+            }
+        });
+        return controls;
+    }
 
     private String formatCounts() {
         java.util.Map<String, Integer> counts = engine.counts();
@@ -472,9 +612,46 @@ public class JavaFXApp extends Application {
                 }
             }
         }
-        // Explicitly update engine state after grid update
-        engine.update_day();
-        engine.update_organ();
+        // If an organism is selected in the list, highlight it with a black border
+
+        Integer selId = selectedTracker.getSelectedId();
+        if (selId != null) {
+            for (Organism o : engine.grid.getOrganisms()) {
+                if (o.getId() == selId) {
+                    g.setStroke(Color.BLACK);
+                    g.setLineWidth(Math.max(1, Math.min(4, (float) (Math.min(w, h) * 0.08)))) ;
+                    g.strokeRect(o.getX() * w, o.getY() * h, w, h);
+                    break;
+                }
+            }
+        }
+        // Update detail panel based on current selection (moved from click handler)
+        if (selId != null) {
+            Organism sel = null;
+            for (Organism o : engine.grid.getOrganisms()) {
+                if (o.getId() == selId) {
+                    sel = o;
+                    break;
+                }
+            }
+            if (sel != null) {
+                StringBuilder sb = new StringBuilder();
+                sb.append("Type: ").append(sel.getType()).append("\n");
+                sb.append("Position: (").append(sel.getX()).append(", ").append(sel.getY()).append(")\n");
+                sb.append("Age: ").append(sel.getAge()).append("\n");
+                sb.append("Energy: ").append(sel.getEnergy()).append("\n");
+                sb.append("Alive: ").append(sel.isAlive() ? "Yes" : "No").append("\n");
+                sb.append("ID: ").append(sel.getId()).append("\n");
+                detailLabel.setText(sb.toString());
+                updateDetail = () -> detailLabel.setText(sb.toString());
+            } else {
+                // selected organism not found (died/removed) — clear selection and detail
+                selectedTracker.clear();
+                if (orgListView != null) orgListView.getSelectionModel().clearSelection();
+                detailLabel.setText("Click a cell to view organism details");
+                updateDetail = () -> detailLabel.setText("Click a cell to view organism details");
+            }
+        }
     }
 
     private void loadIcons() {  
@@ -502,6 +679,18 @@ public class JavaFXApp extends Application {
                 }
             }
             if (found != null) iconMap.put(n, found);
+        }
+        Path bgPath = Path.of("EcosystemSimulation", "icons", "grid_background.png");
+        if (Files.exists(bgPath)) {
+            try {
+                gridBackgroundImage = new Image(bgPath.toUri().toString());
+            } catch (Exception ex) { gridBackgroundImage = null; }
+        }
+        Path simBgPath = Path.of("EcosystemSimulation", "icons", "sim_background.png");
+        if (Files.exists(simBgPath)) {
+            try {
+                simRootBackgroundImage = new Image(simBgPath.toUri().toString());
+            } catch (Exception ex) { simRootBackgroundImage = null; }
         }
     }
 
