@@ -51,7 +51,7 @@ public class JavaFXApp extends Application {
     private IntegerProperty overviewGridH = new SimpleIntegerProperty(0);
     private Label statsLabel;
     private ListView<Organism> orgListView;
-    private SelectedOrganism selectedTracker;
+    private Integer selectedOrganismId = null;
     private Map<String, Image> iconMap = new HashMap<>();
     private Image gridBackgroundImage = null, simRootBackgroundImage = null;
     private boolean useImageBackground = false;
@@ -64,8 +64,8 @@ public class JavaFXApp extends Application {
     public void start(Stage primaryStage) {
         settings = new Settings();
         engine = new SimulationEngine(settings);
-        // selection tracker centralizes selection-by-id
-        selectedTracker = new SelectedOrganism();
+        // restore legacy selection-by-id variable
+        selectedOrganismId = null;
         loadIcons();
 
         // MenuBar (Top)
@@ -410,11 +410,11 @@ public class JavaFXApp extends Application {
         });
         orgListView.getSelectionModel().selectedItemProperty().addListener((obs, oldO, newO) -> {
             if (newO == null) {
-                selectedTracker.clear();
+                selectedOrganismId = null;
                 drawGrid();
                 return;
             }
-            selectedTracker.select(newO.getId());
+            selectedOrganismId = newO.getId();
             drawGrid();
         });
         Label propLabel = new Label("Properties");
@@ -449,13 +449,13 @@ public class JavaFXApp extends Application {
                 current.sort((a, b) -> Integer.compare(a.getId(), b.getId()));
                 items.setAll(current);
                 boolean foundSelected = false;
-                Integer selId = selectedTracker.getSelectedId();
+                Integer selId = selectedOrganismId;
                 if (selId != null) {
                     for (Organism o : items) if (o.getId() == selId) { foundSelected = true; break; }
                 }
                 // If selected organism no longer exists, clear selection and detail
                 if (!foundSelected && selId != null) {
-                    selectedTracker.clear();
+                    selectedOrganismId = null;
                     orgListView.getSelectionModel().clearSelection();
                     detailLabel.setText("Click a cell to view organism details");
                 } else if (foundSelected && selId != null) {
@@ -546,7 +546,7 @@ public class JavaFXApp extends Application {
                 if (!objs.isEmpty()) {
                     // select the top organism at the clicked cell
                     Organism o = objs.get(0);
-                    selectedTracker.select(o.getId());
+                    selectedOrganismId = o.getId();
                     // select and focus the matching item in the list so behavior matches panel selection
                     if (orgListView != null) {
                         for (Organism item : orgListView.getItems()) {
@@ -561,7 +561,7 @@ public class JavaFXApp extends Application {
                     drawGrid();
                 } else {
                     // click on empty cell -> clear selection
-                    selectedTracker.clear();
+                    selectedOrganismId = null;
                     if (orgListView != null) orgListView.getSelectionModel().clearSelection();
                     drawGrid();
                 }
@@ -614,7 +614,7 @@ public class JavaFXApp extends Application {
         }
         // If an organism is selected in the list, highlight it with a black border
 
-        Integer selId = selectedTracker.getSelectedId();
+        Integer selId = selectedOrganismId;
         if (selId != null) {
             for (Organism o : engine.grid.getOrganisms()) {
                 if (o.getId() == selId) {
@@ -646,7 +646,7 @@ public class JavaFXApp extends Application {
                 updateDetail = () -> detailLabel.setText(sb.toString());
             } else {
                 // selected organism not found (died/removed) — clear selection and detail
-                selectedTracker.clear();
+                selectedOrganismId = null;
                 if (orgListView != null) orgListView.getSelectionModel().clearSelection();
                 detailLabel.setText("Click a cell to view organism details");
                 updateDetail = () -> detailLabel.setText("Click a cell to view organism details");
