@@ -33,6 +33,11 @@ import java.nio.file.Path;
 import javafx.beans.binding.Bindings;
 import javafx.beans.property.IntegerProperty;
 import javafx.beans.property.SimpleIntegerProperty;
+import javafx.beans.property.ObjectProperty;
+import javafx.beans.property.SimpleObjectProperty;
+import javafx.application.Platform;
+import ecosystem.ui.SelectionManager;
+import ecosystem.models.OrganismSnapshot;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -50,8 +55,10 @@ public class JavaFXApp extends Application {
     private IntegerProperty overviewGridW = new SimpleIntegerProperty(0);
     private IntegerProperty overviewGridH = new SimpleIntegerProperty(0);
     private Label statsLabel;
-    private ListView<Organism> orgListView;
-    private SelectedOrganism selectedTracker;
+    private ListView<OrganismSnapshot> orgListView;
+    private SelectionManager selectionManager = new SelectionManager();
+    // prevent recursive selection updates between ListView and selectedId
+    private boolean updatingSelection = false;
     private Map<String, Image> iconMap = new HashMap<>();
     private Image gridBackgroundImage = null, simRootBackgroundImage = null;
     private boolean useImageBackground = false;
@@ -64,8 +71,8 @@ public class JavaFXApp extends Application {
     public void start(Stage primaryStage) {
         settings = new Settings();
         engine = new SimulationEngine(settings);
-        // selection tracker centralizes selection-by-id
-        selectedTracker = new SelectedOrganism();
+        // initialize selection manager (null = nothing selected)
+        selectionManager.clear();
         loadIcons();
 
         // MenuBar (Top)
@@ -79,6 +86,37 @@ public class JavaFXApp extends Application {
         // Right panel and control panel are created by helper methods
         VBox rightPanel = createRightPanel();
         HBox controls = createControlPanel(primaryStage);
+
+        // Register grid listener to perform incremental updates to the organisms list
+        engine.grid.addListener(new ecosystem.models.Grid.GridListener() {
+            @Override public void organismAdded(Organism o) {
+                Platform.runLater(() -> {
+                    if (orgListView == null) return;
+                    OrganismSnapshot s = OrganismSnapshot.from(o);
+                    javafx.collections.ObservableList<OrganismSnapshot> items = orgListView.getItems();
+                    int idx = 0; while (idx < items.size() && items.get(idx).id < s.id) idx++;
+                    items.add(idx, s);
+                });
+            }
+            @Override public void organismRemoved(Organism o) {
+                Platform.runLater(() -> {
+                    if (orgListView == null) return;
+                    javafx.collections.ObservableList<OrganismSnapshot> items = orgListView.getItems();
+                    items.removeIf(x -> x.id == o.getId());
+                    Integer sel = selectionManager.getSelectedIdProperty().get();
+                    if (sel != null && sel == o.getId()) selectionManager.clear();
+                });
+            }
+            @Override public void organismUpdated(Organism o) {
+                Platform.runLater(() -> {
+                    if (orgListView == null) return;
+                    javafx.collections.ObservableList<OrganismSnapshot> items = orgListView.getItems();
+                    for (int i = 0; i < items.size(); i++) {
+                        if (items.get(i).id == o.getId()) { items.set(i, OrganismSnapshot.from(o)); break; }
+                    }
+                });
+            }
+        });
 
         // BorderPane layout
         BorderPane simRoot = new BorderPane();
@@ -115,14 +153,13 @@ public class JavaFXApp extends Application {
         simulationScene = new Scene(simRoot, 1300, 700);
 
         // --- Menu Scene ---
-        MainMenu menu = new MainMenu(primaryStage,
+        showMainMenu(primaryStage,
             () -> {
                 primaryStage.setScene(simulationScene);
                 primaryStage.setTitle("Ecosystem Simulation (JavaFX)");
             },
             () -> openSettingsDialog(primaryStage, statsLabel)
         );
-        menu.show();
         menuScene = primaryStage.getScene();
     }
     private MenuBar createMenuBar() {
@@ -401,21 +438,49 @@ public class JavaFXApp extends Application {
         orgListView.setPrefHeight(160);
         orgListView.setPrefWidth(200);
         // Show Organism label in each cell
-        orgListView.setCellFactory(lv -> new ListCell<Organism>() {
-            @Override protected void updateItem(Organism o, boolean empty) {
+        orgListView.setCellFactory(lv -> new ListCell<OrganismSnapshot>() {
+            @Override protected void updateItem(OrganismSnapshot o, boolean empty) {
                 super.updateItem(o, empty);
                 if (empty || o == null) setText(null);
-                else setText(o.getLabelId());
+                else setText(o.labelId);
             }
         });
+
+        // ListView -> SelectionManager (guarded)
         orgListView.getSelectionModel().selectedItemProperty().addListener((obs, oldO, newO) -> {
+            if (updatingSelection) return;
             if (newO == null) {
-                selectedTracker.clear();
+                selectionManager.clear();
                 drawGrid();
                 return;
             }
-            selectedTracker.select(newO.getId());
+            selectionManager.select(newO.id);
             drawGrid();
+        });
+
+        // SelectionManager -> ListView (guarded)
+        selectionManager.getSelectedIdProperty().addListener((obs, oldId, newId) -> {
+            if (updatingSelection) return;
+            updatingSelection = true;
+            try {
+                if (orgListView != null) {
+                    if (newId == null) {
+                        orgListView.getSelectionModel().clearSelection();
+                    } else {
+                        for (OrganismSnapshot o : orgListView.getItems()) {
+                            if (o.id == newId.intValue()) {
+                                orgListView.getSelectionModel().select(o);
+                                orgListView.scrollTo(o);
+                                break;
+                            }
+                        }
+                    }
+                }
+                drawGrid();
+                updateDetail.run();
+            } finally {
+                updatingSelection = false;
+            }
         });
         Label propLabel = new Label("Properties");
         VBox propBox = new VBox(8);
@@ -441,31 +506,33 @@ public class JavaFXApp extends Application {
             // update overview minimap whenever summary updates
             drawOverview();
             // update organisms list (id: type (x,y))
-            if (orgListView != null) {
-                javafx.collections.ObservableList<Organism> items = orgListView.getItems();
-                // replace entire list with current organisms
-                java.util.List<Organism> current = new java.util.ArrayList<>(engine.grid.getOrganisms());
+                if (orgListView != null) {
+                javafx.collections.ObservableList<OrganismSnapshot> items = orgListView.getItems();
+                // replace entire list with current organisms (snapshots)
+                java.util.List<OrganismSnapshot> current = new java.util.ArrayList<>();
+                for (Organism o : engine.grid.getOrganisms()) current.add(OrganismSnapshot.from(o));
                 // Keep a stable ordering (by id) so selection doesn't jump around when grid reorders
-                current.sort((a, b) -> Integer.compare(a.getId(), b.getId()));
-                items.setAll(current);
-                boolean foundSelected = false;
-                Integer selId = selectedTracker.getSelectedId();
-                if (selId != null) {
-                    for (Organism o : items) if (o.getId() == selId) { foundSelected = true; break; }
-                }
-                // If selected organism no longer exists, clear selection and detail
-                if (!foundSelected && selId != null) {
-                    selectedTracker.clear();
-                    orgListView.getSelectionModel().clearSelection();
-                    detailLabel.setText("Click a cell to view organism details");
-                } else if (foundSelected && selId != null) {
-                    // restore selection to the matching organism object
-                    for (Organism o : items) {
-                        if (o.getId() == selId) {
-                            orgListView.getSelectionModel().select(o);
-                            break;
+                current.sort((a, b) -> Integer.compare(a.id, b.id));
+                // replace entire list with current snapshots while guarding selection updates
+                updatingSelection = true;
+                try {
+                    items.setAll(current);
+                    Integer selId = selectionManager.getSelectedIdProperty().get();
+                    boolean foundSelected = false;
+                    if (selId != null) {
+                        for (OrganismSnapshot o : items) if (o.id == selId) { foundSelected = true; break; }
+                    }
+                    if (!foundSelected && selId != null) {
+                        selectionManager.clear();
+                        orgListView.getSelectionModel().clearSelection();
+                        detailLabel.setText("Click a cell to view organism details");
+                    } else if (foundSelected && selId != null) {
+                        for (OrganismSnapshot o : items) {
+                            if (o.id == selId) { orgListView.getSelectionModel().select(o); break; }
                         }
                     }
+                } finally {
+                    updatingSelection = false;
                 }
             }
         };
@@ -544,24 +611,13 @@ public class JavaFXApp extends Application {
             if (gx >= 0 && gx < cols && gy >= 0 && gy < rows) {
                 java.util.List<Organism> objs = engine.grid.organismsAt(gx, gy);
                 if (!objs.isEmpty()) {
-                    // select the top organism at the clicked cell
+                    // select the top organism at the clicked cell (selection manager listener will update list)
                     Organism o = objs.get(0);
-                    selectedTracker.select(o.getId());
-                    // select and focus the matching item in the list so behavior matches panel selection
-                    if (orgListView != null) {
-                        for (Organism item : orgListView.getItems()) {
-                            if (item.getId() == o.getId()) {
-                                orgListView.getSelectionModel().select(item);
-                                orgListView.scrollTo(item);
-                                orgListView.requestFocus();
-                                break;
-                            }
-                        }
-                    }
+                    selectionManager.select(o.getId());
                     drawGrid();
                 } else {
                     // click on empty cell -> clear selection
-                    selectedTracker.clear();
+                    selectionManager.clear();
                     if (orgListView != null) orgListView.getSelectionModel().clearSelection();
                     drawGrid();
                 }
@@ -614,26 +670,18 @@ public class JavaFXApp extends Application {
         }
         // If an organism is selected in the list, highlight it with a black border
 
-        Integer selId = selectedTracker.getSelectedId();
+        Integer selId = selectionManager.getSelectedIdProperty().get();
         if (selId != null) {
-            for (Organism o : engine.grid.getOrganisms()) {
-                if (o.getId() == selId) {
-                    g.setStroke(Color.BLACK);
-                    g.setLineWidth(Math.max(1, Math.min(4, (float) (Math.min(w, h) * 0.08)))) ;
-                    g.strokeRect(o.getX() * w, o.getY() * h, w, h);
-                    break;
-                }
+            Organism o = engine.grid.getOrganismById(selId);
+            if (o != null) {
+                g.setStroke(Color.BLACK);
+                g.setLineWidth(Math.max(1, Math.min(4, (float) (Math.min(w, h) * 0.08))));
+                g.strokeRect(o.getX() * w, o.getY() * h, w, h);
             }
         }
         // Update detail panel based on current selection (moved from click handler)
         if (selId != null) {
-            Organism sel = null;
-            for (Organism o : engine.grid.getOrganisms()) {
-                if (o.getId() == selId) {
-                    sel = o;
-                    break;
-                }
-            }
+            Organism sel = engine.grid.getOrganismById(selId);
             if (sel != null) {
                 StringBuilder sb = new StringBuilder();
                 sb.append("Type: ").append(sel.getType()).append("\n");
@@ -646,7 +694,7 @@ public class JavaFXApp extends Application {
                 updateDetail = () -> detailLabel.setText(sb.toString());
             } else {
                 // selected organism not found (died/removed) — clear selection and detail
-                selectedTracker.clear();
+                selectionManager.clear();
                 if (orgListView != null) orgListView.getSelectionModel().clearSelection();
                 detailLabel.setText("Click a cell to view organism details");
                 updateDetail = () -> detailLabel.setText("Click a cell to view organism details");
@@ -697,4 +745,115 @@ public class JavaFXApp extends Application {
     public static void main(String[] args) {
         launch(args);
     }
+
+    // selection state is stored in the `selectedId` property declared at top
+
+    /**
+     * Show the main menu as a scene on the provided stage.
+     */
+    private void showMainMenu(Stage stage, Runnable onStart, Runnable onSettings) {
+        StackPane root = new StackPane();
+
+        // Load background image if exists
+        Path bgPath = Path.of("EcosystemSimulation", "icons", "background.png");
+        if (!Files.exists(bgPath)) bgPath = Path.of("icons", "background.png");
+        if (Files.exists(bgPath)) {
+            Image bgImg = new Image(bgPath.toUri().toString());
+            BackgroundImage bg = new BackgroundImage(
+                bgImg,
+                BackgroundRepeat.NO_REPEAT,
+                BackgroundRepeat.NO_REPEAT,
+                BackgroundPosition.CENTER,
+                new BackgroundSize(1.0, 1.0, true, true, false, true)
+            );
+            root.setBackground(new Background(bg));
+        } else {
+            root.setStyle("-fx-background-color: linear-gradient(to bottom,#e0f7fa,#b2ebf2);");
+        }
+
+        VBox menuBox = new VBox(18);
+        menuBox.setAlignment(Pos.CENTER);
+        menuBox.setMaxWidth(340);
+
+        Label title = new Label("Ecosystem Simulation");
+        title.setFont(javafx.scene.text.Font.font("Arial", javafx.scene.text.FontWeight.BOLD, 26));
+        title.setTextFill(Color.web("#3ddfafff"));
+        title.setStyle("-fx-effect: dropshadow(gaussian, #fefefeff, 8, 0.5, 0, 2);");
+
+        Button startBtn = createMenuButton("Start Simulation");
+        Button settingsBtn = createMenuButton("Settings");
+        Button aboutBtn = createMenuButton("About");
+        Button helpBtn = createMenuButton("Help");
+        Button exitBtn = createMenuButton("Exit");
+
+        startBtn.setOnAction(e -> { if (onStart != null) onStart.run(); });
+        settingsBtn.setOnAction(e -> { if (onSettings != null) onSettings.run(); });
+        aboutBtn.setOnAction(e -> showAboutDialog(stage));
+        helpBtn.setOnAction(e -> showHelpDialog(stage));
+        exitBtn.setOnAction(e -> stage.close());
+
+        menuBox.getChildren().addAll(title, startBtn, settingsBtn, aboutBtn, helpBtn, exitBtn);
+
+        root.getChildren().add(menuBox);
+
+        Scene scene = new Scene(root, 1300, 700);
+        scene.widthProperty().addListener((obs, oldV, newV) -> {
+            double w = newV.doubleValue();
+            double btnW = Math.max(180, Math.min(320, w * 0.45));
+            for (javafx.scene.Node n : menuBox.getChildren()) {
+                if (n instanceof Button) ((Button)n).setPrefWidth(btnW);
+            }
+        });
+        scene.heightProperty().addListener((obs, oldV, newV) -> {
+            double h = newV.doubleValue();
+            menuBox.setSpacing(Math.max(14, Math.min(32, h * 0.04)));
+        });
+
+        stage.setScene(scene);
+        stage.setTitle("Ecosystem Simulation — Main Menu");
+        stage.show();
+    }
+
+    private Button createMenuButton(String text) {
+        Button btn = new Button(text);
+        btn.setFont(javafx.scene.text.Font.font("Arial", javafx.scene.text.FontWeight.SEMI_BOLD, 20));
+        btn.setStyle("-fx-background-color: #69bdacff; -fx-text-fill: white; -fx-background-radius: 12; -fx-padding: 10 0; -fx-effect: dropshadow(gaussian, #80cbc4, 6, 0.3, 0, 2);");
+        btn.setPrefHeight(44);
+        btn.setMaxWidth(Double.MAX_VALUE);
+        btn.setOnMouseEntered(e -> btn.setStyle("-fx-background-color: #70772cff; -fx-text-fill: white; -fx-background-radius: 12; -fx-padding: 10 0; -fx-effect: dropshadow(gaussian, #b2dfdb, 8, 0.5, 0, 2);"));
+        btn.setOnMouseExited(e -> btn.setStyle("-fx-background-color: #69bdacff; -fx-text-fill: white; -fx-background-radius: 12; -fx-padding: 10 0; -fx-effect: dropshadow(gaussian, #80cbc4, 6, 0.3, 0, 2);"));
+        return btn;
+    }
+
+    private void showAboutDialog(Stage owner) {
+        Stage dlg = new Stage();
+        dlg.initOwner(owner);
+        dlg.setTitle("About");
+        VBox v = new VBox(16,
+            new Label("Ecosystem Simulation"),
+            new Label("Version 1.0"),
+            new Label("Developed by HUST Team")
+        );
+        v.setAlignment(Pos.CENTER);
+        v.setStyle("-fx-padding: 32;");
+        dlg.setScene(new Scene(v, 320, 180));
+        dlg.show();
+    }
+
+    private void showHelpDialog(Stage owner) {
+        Stage dlg = new Stage();
+        dlg.initOwner(owner);
+        dlg.setTitle("Help");
+        VBox v = new VBox(16,
+            new Label("- Start Simulation: Bắt đầu mô phỏng hệ sinh thái."),
+            new Label("- Settings: Cài đặt thông số mô phỏng."),
+            new Label("- About: Thông tin ứng dụng."),
+            new Label("- Exit: Thoát chương trình.")
+        );
+        v.setAlignment(Pos.CENTER_LEFT);
+        v.setStyle("-fx-padding: 32;");
+        dlg.setScene(new Scene(v, 400, 220));
+        dlg.show();
+    }
+
 }

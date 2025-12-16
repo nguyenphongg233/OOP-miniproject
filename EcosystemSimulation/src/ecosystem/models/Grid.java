@@ -6,6 +6,15 @@ import java.util.Random;
 import ecosystem.Settings;
 
 public class Grid {
+    public interface GridListener {
+        default void organismAdded(Organism o) {}
+        default void organismRemoved(Organism o) {}
+        default void organismUpdated(Organism o) {}
+    }
+    private final java.util.List<GridListener> listeners = new java.util.ArrayList<>();
+
+    public void addListener(GridListener l) { if (l != null) listeners.add(l); }
+    public void removeListener(GridListener l) { listeners.remove(l); }
         // Trả về sinh vật đầu tiên tại vị trí (x, y), hoặc null nếu không có
     public Organism getOrganismAt(int x, int y) {
         for (Organism o : organisms) {
@@ -16,6 +25,8 @@ public class Grid {
     private int width;
     private int height;
     private List<Organism> organisms;
+    // map for fast id -> organism lookup
+    private java.util.Map<Integer, Organism> idIndex;
     private int plantEnergy;
     private double plantGrowRate;
     private Integer herbivoreReproduceThreshold;
@@ -31,6 +42,7 @@ public class Grid {
         this.width = s.gridWidth;
         this.height = s.gridHeight;
         this.organisms = new ArrayList<>();
+        this.idIndex = new java.util.HashMap<>();
         this.plantEnergy = s.plantEnergy;
         this.plantGrowRate = s.plantGrowRate;
     }
@@ -49,8 +61,25 @@ public class Grid {
         return x >= 0 && x < width && y >= 0 && y < height;
     }
 
-    public void addOrganism(Organism o) { organisms.add(o); }
-    public void removeOrganism(Organism o) { organisms.remove(o); }
+    public void addOrganism(Organism o) { 
+        organisms.add(o);
+        idIndex.put(o.getId(), o);
+        for (GridListener l : listeners) {
+            try { l.organismAdded(o); } catch (Exception ex) {}
+        }
+    }
+    public void removeOrganism(Organism o) { 
+        organisms.remove(o); 
+        idIndex.remove(o.getId());
+        for (GridListener l : listeners) {
+            try { l.organismRemoved(o); } catch (Exception ex) {}
+        }
+    }
+
+    /** O(1) lookup by id (returns null if not present) */
+    public Organism getOrganismById(int id) {
+        return idIndex.get(id);
+    }
 
     public List<Organism> organismsAt(int x, int y) {
         List<Organism> ret = new ArrayList<>();
@@ -107,7 +136,33 @@ public class Grid {
         // remove dead
         List<Organism> alive = new ArrayList<>();
         for (Organism o : organisms) if (o.isAlive()) alive.add(o);
+        // compute changes: removed and updated
+        java.util.Map<Integer, Organism> before = new java.util.HashMap<>();
+        for (Organism o : organisms) before.put(o.getId(), o);
+        java.util.Map<Integer, Organism> after = new java.util.HashMap<>();
+        for (Organism o : alive) after.put(o.getId(), o);
+
+        // removed
+        for (Integer id : before.keySet()) {
+            if (!after.containsKey(id)) {
+                Organism removed = before.get(id);
+                for (GridListener l : listeners) {
+                    try { l.organismRemoved(removed); } catch (Exception ex) {}
+                }
+            }
+        }
+        // updated (present in after)
+        for (Integer id : after.keySet()) {
+            Organism updated = after.get(id);
+            for (GridListener l : listeners) {
+                try { l.organismUpdated(updated); } catch (Exception ex) {}
+            }
+        }
+
         organisms = alive;
+        // rebuild id index to reflect removals/moves
+        idIndex.clear();
+        for (Organism o : organisms) idIndex.put(o.getId(), o);
     }
 
     public void populateBasic(int initialPlants, int initialHerbivores, int initialCarnivores,

@@ -15,8 +15,14 @@ public abstract class Organism {
      * Examples: Plant -> P000001, Herbivore -> H000012, Carnivore -> C000123
      */
     public String getLabelId() {
-        // Return numeric-only zero-padded ID (8 digits), e.g. 00000001
-        return String.format("%08d", id);
+        // Prefix by type initial and zero-pad numeric id to 8 digits, e.g. P00000001
+        String prefix = "?";
+        String type = this.getClass().getSimpleName();
+        if (type.startsWith("Plant")) prefix = "P";
+        else if (type.startsWith("Herbivore")) prefix = "H";
+        else if (type.startsWith("Carnivore")) prefix = "C";
+        else prefix = type.isEmpty() ? "?" : type.substring(0, 1).toUpperCase();
+        return String.format("%s%08d", prefix, id);
     }
 
     public int getAge() {
