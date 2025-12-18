@@ -123,13 +123,13 @@ public class JavaFXApp extends Application {
         simRoot.setBackground(new Background(new BackgroundFill(
                 Color.BEIGE, CornerRadii.EMPTY, Insets.EMPTY
         )));
+
         simRoot.setTop(menuBar);
         simRoot.setLeft(leftPanel);
         simRoot.setRight(rightPanel);
         BorderPane bottomPane = new BorderPane();
         bottomPane.setCenter(canvas);
         bottomPane.setBottom(controls);
-        
         simRoot.setCenter(bottomPane);
         // If a grid background image was loaded earlier, use it; otherwise keep the plain BEIGE background
         
