@@ -36,18 +36,18 @@ public class SimulationEngine {
     public SimulationEngine(Settings s, boolean verbose) {
         this.grid = new Grid(s);
         this.verbose = verbose;
-        this.grid.setHerbivoreReproduceThreshold(s.herbivoreReproduceThreshold);
-        this.grid.setCarnivoreReproduceThreshold(s.carnivoreReproduceThreshold);
+        this.grid.setHerbivoreReproduceThreshold(s.getHerbivoreReproduceThreshold());
+        this.grid.setCarnivoreReproduceThreshold(s.getCarnivoreReproduceThreshold());
         this.grid.populateBasic(
-            s.initialPlants,
-            s.initialHerbivores,
-            s.initialCarnivores,
-            s.herbivoreStartEnergy,
-            s.herbivoreMoveCost,
-            s.herbivoreEatGain,
-            s.carnivoreStartEnergy,
-            s.carnivoreMoveCost,
-            s.carnivoreEatGain
+            s.getInitialPlants(),
+            s.getInitialHerbivores(),
+            s.getInitialCarnivores(),
+            s.getHerbivoreStartEnergy(),
+            s.getHerbivoreMoveCost(),
+            s.getHerbivoreEatGain(),
+            s.getCarnivoreStartEnergy(),
+            s.getCarnivoreMoveCost(),
+            s.getCarnivoreEatGain()
         );
     }
 

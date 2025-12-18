@@ -44,8 +44,7 @@ import java.util.Map;
 public class JavaFXApp extends Application {
 
     // Instance variables
-    private SimulationEngine engine;
-    private Settings settings;
+    private AppController controller;
     private int cellSize = 20;
     private Timeline timeline;
     private Scene menuScene;
@@ -56,12 +55,10 @@ public class JavaFXApp extends Application {
     private IntegerProperty overviewGridH = new SimpleIntegerProperty(0);
     private Label statsLabel;
     private ListView<OrganismSnapshot> orgListView;
-    private SelectionManager selectionManager = new SelectionManager();
+    
     // prevent recursive selection updates between ListView and selectedId
     private boolean updatingSelection = false;
-    private Map<String, Image> iconMap = new HashMap<>();
-    private Image gridBackgroundImage = null, simRootBackgroundImage = null;
-    private boolean useImageBackground = false;
+    
     // For property panel
     private Label detailLabel;
     private Runnable updateSummary;
@@ -69,26 +66,39 @@ public class JavaFXApp extends Application {
 
     @Override
     public void start(Stage primaryStage) {
-        settings = new Settings();
-        engine = new SimulationEngine(settings);
+        controller = new AppController();
         // initialize selection manager (null = nothing selected)
-        selectionManager.clear();
-        loadIcons();
+        controller.getSelectionManager().clear();
+        IconLoader.loadIcons(controller);
 
         // MenuBar (Top)
-        MenuBar menuBar = createMenuBar();
+        MenuBar menuBar = MenuFactory.createMenuBar(controller, () -> drawGrid());
         // Left: Overview + TreeView
         VBox leftPanel = OverviewPanel();
         // Center: Canvas lớn
-        canvas = new Canvas(engine.grid.getWidth() * cellSize, engine.grid.getHeight() * cellSize);
+        canvas = new Canvas(controller.getEngine().grid.getWidth() * cellSize, controller.getEngine().grid.getHeight() * cellSize);
         drawGrid();
+
+        // Prepare settings dialog action which will reset engine and update UI when applied
+        Runnable onSettingsApplied = () -> {
+            controller.resetEngine();
+            canvas.setWidth(controller.getEngine().grid.getWidth() * cellSize);
+            canvas.setHeight(controller.getEngine().grid.getHeight() * cellSize);
+            overviewGridW.set(controller.getSettings().getGridWidth());
+            overviewGridH.set(controller.getSettings().getGridHeight());
+            updateSummary.run();
+            drawGrid();
+            statsLabel.setText(formatCounts());
+            drawOverview();
+            updateDetail.run();
+        };
 
         // Right panel and control panel are created by helper methods
         VBox rightPanel = createRightPanel();
-        HBox controls = createControlPanel(primaryStage);
+        HBox controls = createControlPanel(primaryStage, onSettingsApplied);
 
         // Register grid listener to perform incremental updates to the organisms list
-        engine.grid.addListener(new ecosystem.models.Grid.GridListener() {
+        controller.getEngine().grid.addListener(new ecosystem.models.Grid.GridListener() {
             @Override public void organismAdded(Organism o) {
                 Platform.runLater(() -> {
                     if (orgListView == null) return;
@@ -103,8 +113,8 @@ public class JavaFXApp extends Application {
                     if (orgListView == null) return;
                     javafx.collections.ObservableList<OrganismSnapshot> items = orgListView.getItems();
                     items.removeIf(x -> x.id == o.getId());
-                    Integer sel = selectionManager.getSelectedIdProperty().get();
-                    if (sel != null && sel == o.getId()) selectionManager.clear();
+                    Integer sel = controller.getSelectionManager().getSelectedIdProperty().get();
+                    if (sel != null && sel == o.getId()) controller.getSelectionManager().clear();
                 });
             }
             @Override public void organismUpdated(Organism o) {
@@ -134,9 +144,9 @@ public class JavaFXApp extends Application {
         // If a grid background image was loaded earlier, use it; otherwise keep the plain BEIGE background
         
         
-        if (simRootBackgroundImage != null) {
+        if (controller.getSimRootBackgroundImage() != null) {
             BackgroundImage bgImg = new BackgroundImage(
-                simRootBackgroundImage,
+                controller.getSimRootBackgroundImage(),
                 BackgroundRepeat.NO_REPEAT,
                 BackgroundRepeat.NO_REPEAT,
                 BackgroundPosition.CENTER,
@@ -158,41 +168,11 @@ public class JavaFXApp extends Application {
                 primaryStage.setScene(simulationScene);
                 primaryStage.setTitle("Ecosystem Simulation (JavaFX)");
             },
-            () -> openSettingsDialog(primaryStage, statsLabel)
+            () -> SettingsDialog.open(primaryStage, controller, onSettingsApplied)
         );
         menuScene = primaryStage.getScene();
     }
-    private MenuBar createMenuBar() {
-        MenuBar menuBar = new MenuBar();
-        Menu menuFile = new Menu("File");
-        Menu menuWorld = new Menu("World");
-        Menu menuHelp = new Menu("Help");
-        // Add background selection
-        Menu menuView = new Menu("View");
-        RadioMenuItem bgImgItem = new RadioMenuItem("Grid Background: Image (icons/grid_background.png)");
-        RadioMenuItem bgColorItem = new RadioMenuItem("Grid Background: Beige");
-        ToggleGroup bgGroup = new ToggleGroup();
-        bgImgItem.setToggleGroup(bgGroup);
-        bgColorItem.setToggleGroup(bgGroup);
-        if (gridBackgroundImage != null) {
-            bgImgItem.setSelected(true);
-            useImageBackground = true;
-        } else {
-            bgColorItem.setSelected(true);
-            useImageBackground = false;
-        }
-        menuView.getItems().addAll(bgImgItem, bgColorItem);
-        menuBar.getMenus().addAll(menuFile, menuWorld, menuView, menuHelp);
-        bgImgItem.setOnAction(e -> {
-            useImageBackground = true;
-            drawGrid();
-        });
-        bgColorItem.setOnAction(e -> {
-            useImageBackground = false;
-            drawGrid();
-        });
-        return menuBar;
-    }
+    
     private VBox OverviewPanel() {
         VBox leftPanel = new VBox(10);
         leftPanel.setPadding(new Insets(8));
@@ -242,8 +222,8 @@ public class JavaFXApp extends Application {
         treeView.setShowRoot(true);
         leftPanel.getChildren().addAll(overviewLabel, overviewCanvas, treeView);
         // Initialize overview grid size from settings and draw
-        overviewGridW.set(settings.gridWidth);
-        overviewGridH.set(settings.gridHeight);
+        overviewGridW.set(controller.getSettings().getGridWidth());
+        overviewGridH.set(controller.getSettings().getGridHeight());
         drawOverview();
         return leftPanel;
     }
@@ -253,10 +233,10 @@ public class JavaFXApp extends Application {
      * Colors: Plant = light green, Herbivore = dark gray, Carnivore = black.
      */
     private void drawOverview() {
-        if (overviewCanvas == null || engine == null) return;
+        if (overviewCanvas == null || controller.getEngine() == null) return;
         GraphicsContext g = overviewCanvas.getGraphicsContext2D();
-        int cols = engine.grid.getWidth();
-        int rows = engine.grid.getHeight();
+        int cols = controller.getEngine().grid.getWidth();
+        int rows = controller.getEngine().grid.getHeight();
         double w = overviewCanvas.getWidth();
         double h = overviewCanvas.getHeight();
         if (w <= 0 || h <= 0 || cols <= 0 || rows <= 0) return;
@@ -276,7 +256,7 @@ public class JavaFXApp extends Application {
                 // map draw cell to grid coordinate (sample)
                 int gx = (int)((double)rx * cols / drawCols);
                 int gy = (int)((double)ry * rows / drawRows);
-                java.util.List<Organism> objs = engine.grid.organismsAt(gx, gy);
+                java.util.List<Organism> objs = controller.getEngine().grid.organismsAt(gx, gy);
                 if (objs.isEmpty()) {
                     // empty cell
                     g.setFill(Color.web("#e9efe9"));
@@ -293,141 +273,7 @@ public class JavaFXApp extends Application {
             }
         }
     }
-    private void openSettingsDialog(Stage owner, Label statsLabel) {
-        Stage dlg = new Stage();
-        dlg.initOwner(owner);
-        dlg.initModality(Modality.APPLICATION_MODAL);
-        dlg.setTitle("Settings");
-        TextField gridW = new TextField(String.valueOf(settings.gridWidth));
-        TextField gridH = new TextField(String.valueOf(settings.gridHeight));
-
-        TextField plants = new TextField(String.valueOf(settings.initialPlants));
-        TextField herbs = new TextField(String.valueOf(settings.initialHerbivores));
-        TextField carn = new TextField(String.valueOf(settings.initialCarnivores));
-
-        TextField plantEnergy = new TextField(String.valueOf(settings.plantEnergy));
-        TextField plantGrow = new TextField(String.valueOf(settings.plantGrowRate));
-
-        TextField hEnergy = new TextField(String.valueOf(settings.herbivoreStartEnergy));
-        TextField hMove = new TextField(String.valueOf(settings.herbivoreMoveCost));
-        TextField hEat = new TextField(String.valueOf(settings.herbivoreEatGain));
-        TextField hRepro = new TextField(String.valueOf(settings.herbivoreReproduceThreshold));
-
-        TextField cEnergy = new TextField(String.valueOf(settings.carnivoreStartEnergy));
-        TextField cMove = new TextField(String.valueOf(settings.carnivoreMoveCost));
-        TextField cEat = new TextField(String.valueOf(settings.carnivoreEatGain));
-        TextField cRepro = new TextField(String.valueOf(settings.carnivoreReproduceThreshold));
-
-        Button apply = new Button("Apply");
-        Button cancel = new Button("Cancel");
-
-        apply.setOnAction(e -> {
-            try {
-                settings.gridWidth = Integer.parseInt(gridW.getText());
-                settings.gridHeight = Integer.parseInt(gridH.getText());
-
-                settings.initialPlants = Integer.parseInt(plants.getText());
-                settings.initialHerbivores = Integer.parseInt(herbs.getText());
-                settings.initialCarnivores = Integer.parseInt(carn.getText());
-
-                settings.plantEnergy = Integer.parseInt(plantEnergy.getText());
-                settings.plantGrowRate = Double.parseDouble(plantGrow.getText());
-
-                settings.herbivoreStartEnergy = Integer.parseInt(hEnergy.getText());
-                settings.herbivoreMoveCost = Integer.parseInt(hMove.getText());
-                settings.herbivoreEatGain = Integer.parseInt(hEat.getText());
-                settings.herbivoreReproduceThreshold = Integer.parseInt(hRepro.getText());
-
-                settings.carnivoreStartEnergy = Integer.parseInt(cEnergy.getText());
-                settings.carnivoreMoveCost = Integer.parseInt(cMove.getText());
-                settings.carnivoreEatGain = Integer.parseInt(cEat.getText());
-                settings.carnivoreReproduceThreshold = Integer.parseInt(cRepro.getText());
-
-                dlg.close();
-            } catch (Exception ex) {
-                Alert a = new Alert(Alert.AlertType.ERROR, "Invalid values: " + ex.getMessage());
-                a.showAndWait();
-            }
-        });
-        cancel.setOnAction(e -> dlg.close());
-
-
-        // Chia thông số thành 2 cột
-        javafx.scene.layout.GridPane grid = new javafx.scene.layout.GridPane();
-        grid.setHgap(16);
-        grid.setVgap(10);
-        grid.setPadding(new Insets(16));
-
-        // Cột trái
-        grid.add(new Label("Grid W:"), 0, 0);
-        grid.add(gridW, 1, 0);
-        grid.add(new Label("Grid H:"), 0, 1);
-        grid.add(gridH, 1, 1);
-        grid.add(new Label("Initial plants:"), 0, 2);
-        grid.add(plants, 1, 2);
-        grid.add(new Label("Initial herbivores:"), 0, 3);
-        grid.add(herbs, 1, 3);
-        grid.add(new Label("Initial carnivores:"), 0, 4);
-        grid.add(carn, 1, 4);
-        grid.add(new Label("Plant energy:"), 0, 5);
-        grid.add(plantEnergy, 1, 5);
-        grid.add(new Label("Plant grow rate (0-1):"), 0, 6);
-        grid.add(plantGrow, 1, 6);
-
-        // Cột phải
-        grid.add(new Label("Herbivore start energy:"), 2, 0);
-        grid.add(hEnergy, 3, 0);
-        grid.add(new Label("Herbivore move cost:"), 2, 1);
-        grid.add(hMove, 3, 1);
-        grid.add(new Label("Herbivore eat gain:"), 2, 2);
-        grid.add(hEat, 3, 2);
-        grid.add(new Label("Herbivore reproduce threshold:"), 2, 3);
-        grid.add(hRepro, 3, 3);
-        grid.add(new Label("Carnivore start energy:"), 2, 4);
-        grid.add(cEnergy, 3, 4);
-        grid.add(new Label("Carnivore move cost:"), 2, 5);
-        grid.add(cMove, 3, 5);
-        grid.add(new Label("Carnivore eat gain:"), 2, 6);
-        grid.add(cEat, 3, 6);
-        grid.add(new Label("Carnivore reproduce threshold:"), 2, 7);
-        grid.add(cRepro, 3, 7);
-
-        // ScrollPane cho toàn bộ grid
-        javafx.scene.control.ScrollPane scroll = new javafx.scene.control.ScrollPane(grid);
-        scroll.setFitToWidth(true);
-        scroll.setPrefViewportHeight(340);
-
-        // Nút Apply/Cancel ở dưới
-        HBox btnBox = new HBox(16, apply, cancel);
-        btnBox.setAlignment(Pos.CENTER_RIGHT);
-        btnBox.setPadding(new Insets(12, 16, 12, 16));
-
-
-        VBox v = new VBox(8, scroll, btnBox);
-        v.setPrefWidth(600);
-        v.setAlignment(Pos.CENTER);
-        scroll.setStyle("-fx-background-color: transparent;");
-        btnBox.setAlignment(Pos.CENTER);
-        StackPane stack = new StackPane(v);
-        stack.setPrefSize(700, 500);
-        StackPane.setAlignment(v, Pos.CENTER);
-        dlg.setScene(new Scene(stack));
-        dlg.show();
-
-        // After dialog close, reset simulation with new settings
-        engine = new SimulationEngine(settings);
-        canvas.setWidth(engine.grid.getWidth() * cellSize);
-        canvas.setHeight(engine.grid.getHeight() * cellSize);
-        // Update overview grid bindings first
-        overviewGridW.set(settings.gridWidth);
-        overviewGridH.set(settings.gridHeight);
-        // Refresh summary (which also redraws overview), then draw grid
-        updateSummary.run();
-        drawGrid();
-        statsLabel.setText(formatCounts());
-        drawOverview();
-        updateDetail.run();
-    }
+    
 
     private VBox createRightPanel() {
         VBox rightPanel = new VBox(10);
@@ -450,16 +296,16 @@ public class JavaFXApp extends Application {
         orgListView.getSelectionModel().selectedItemProperty().addListener((obs, oldO, newO) -> {
             if (updatingSelection) return;
             if (newO == null) {
-                selectionManager.clear();
+                controller.getSelectionManager().clear();
                 drawGrid();
                 return;
             }
-            selectionManager.select(newO.id);
+            controller.getSelectionManager().select(newO.id);
             drawGrid();
         });
 
         // SelectionManager -> ListView (guarded)
-        selectionManager.getSelectedIdProperty().addListener((obs, oldId, newId) -> {
+        controller.getSelectionManager().getSelectedIdProperty().addListener((obs, oldId, newId) -> {
             if (updatingSelection) return;
             updatingSelection = true;
             try {
@@ -495,8 +341,8 @@ public class JavaFXApp extends Application {
         propBox.getChildren().addAll(dayLabel, plantLabel, herbLabel, carnLabel, orgLabel, new Separator(), detailLabel);
         rightPanel.getChildren().addAll(orgListLabel, orgListView, propLabel, propBox);
         updateSummary = () -> {
-            java.util.Map<String, Integer> counts = engine.counts();
-            dayLabel.setText("Day: " + engine.getDay() + " (Step: " + engine.getStep() + ")");
+                java.util.Map<String, Integer> counts = controller.getEngine().counts();
+            dayLabel.setText("Day: " + controller.getEngine().getDay() + " (Step: " + controller.getEngine().getStep() + ")");
             plantLabel.setText("Plants: " + counts.getOrDefault("Plant", 0));
             herbLabel.setText("Herbivores: " + counts.getOrDefault("Herbivore", 0));
             carnLabel.setText("Carnivores: " + counts.getOrDefault("Carnivore", 0));
@@ -510,20 +356,20 @@ public class JavaFXApp extends Application {
                 javafx.collections.ObservableList<OrganismSnapshot> items = orgListView.getItems();
                 // replace entire list with current organisms (snapshots)
                 java.util.List<OrganismSnapshot> current = new java.util.ArrayList<>();
-                for (Organism o : engine.grid.getOrganisms()) current.add(OrganismSnapshot.from(o));
+                for (Organism o : controller.getEngine().grid.getOrganisms()) current.add(OrganismSnapshot.from(o));
                 // Keep a stable ordering (by id) so selection doesn't jump around when grid reorders
                 current.sort((a, b) -> Integer.compare(a.id, b.id));
                 // replace entire list with current snapshots while guarding selection updates
                 updatingSelection = true;
                 try {
                     items.setAll(current);
-                    Integer selId = selectionManager.getSelectedIdProperty().get();
+                    Integer selId = controller.getSelectionManager().getSelectedIdProperty().get();
                     boolean foundSelected = false;
                     if (selId != null) {
                         for (OrganismSnapshot o : items) if (o.id == selId) { foundSelected = true; break; }
                     }
                     if (!foundSelected && selId != null) {
-                        selectionManager.clear();
+                        controller.getSelectionManager().clear();
                         orgListView.getSelectionModel().clearSelection();
                         detailLabel.setText("Click a cell to view organism details");
                     } else if (foundSelected && selId != null) {
@@ -543,7 +389,7 @@ public class JavaFXApp extends Application {
         return rightPanel;
     }
 
-    private HBox createControlPanel(Stage primaryStage) {
+    private HBox createControlPanel(Stage primaryStage, Runnable onSettingsApplied) {
         Button startBtn = new Button("Start");
         Button pauseBtn = new Button("Pause");
         Button stepBtn = new Button("Step");
@@ -565,7 +411,7 @@ public class JavaFXApp extends Application {
         settingsBtn.setStyle(btnStyle);
         backBtn.setStyle(btnStyle);
         timeline = new Timeline(new KeyFrame(Duration.millis(speed.getValue()), e -> {
-            engine.tick();
+            controller.getEngine().tick();
             updateSummary.run();
             drawGrid();
             statsLabel.setText(formatCounts());
@@ -576,7 +422,7 @@ public class JavaFXApp extends Application {
         startBtn.setOnAction(e -> timeline.play());
         pauseBtn.setOnAction(e -> timeline.pause());
         stepBtn.setOnAction(e -> {
-            engine.tick();
+            controller.getEngine().tick();
             updateSummary.run();
             drawGrid();
             statsLabel.setText(formatCounts());
@@ -584,15 +430,15 @@ public class JavaFXApp extends Application {
         });
         resetBtn.setOnAction(e -> {
             timeline.stop();
-            engine = new SimulationEngine(settings);
-            canvas.setWidth(engine.grid.getWidth() * cellSize);
-            canvas.setHeight(engine.grid.getHeight() * cellSize);
+            controller.resetEngine();
+            canvas.setWidth(controller.getEngine().grid.getWidth() * cellSize);
+            canvas.setHeight(controller.getEngine().grid.getHeight() * cellSize);
             updateSummary.run();
             drawGrid();
             statsLabel.setText(formatCounts());
             updateDetail.run();
         });
-        settingsBtn.setOnAction(e -> openSettingsDialog(primaryStage, statsLabel));
+        settingsBtn.setOnAction(e -> SettingsDialog.open(primaryStage, controller, onSettingsApplied));
         backBtn.setOnAction(e -> {
             timeline.stop();
             primaryStage.setScene(menuScene);
@@ -602,22 +448,22 @@ public class JavaFXApp extends Application {
         canvas.heightProperty().addListener((o, oldV, newV) -> drawGrid());
         canvas.setOnMouseClicked(e -> {
             // compute grid coords using current canvas scale (not fixed cellSize)
-            int cols = engine.grid.getWidth();
-            int rows = engine.grid.getHeight();
+            int cols = controller.getEngine().grid.getWidth();
+            int rows = controller.getEngine().grid.getHeight();
             double cellW = canvas.getWidth() / (double) Math.max(1, cols);
             double cellH = canvas.getHeight() / (double) Math.max(1, rows);
             int gx = (int) Math.floor(e.getX() / cellW);
             int gy = (int) Math.floor(e.getY() / cellH);
             if (gx >= 0 && gx < cols && gy >= 0 && gy < rows) {
-                java.util.List<Organism> objs = engine.grid.organismsAt(gx, gy);
+                java.util.List<Organism> objs = controller.getEngine().grid.organismsAt(gx, gy);
                 if (!objs.isEmpty()) {
                     // select the top organism at the clicked cell (selection manager listener will update list)
                     Organism o = objs.get(0);
-                    selectionManager.select(o.getId());
+                    controller.getSelectionManager().select(o.getId());
                     drawGrid();
                 } else {
                     // click on empty cell -> clear selection
-                    selectionManager.clear();
+                    controller.getSelectionManager().clear();
                     if (orgListView != null) orgListView.getSelectionModel().clearSelection();
                     drawGrid();
                 }
@@ -627,7 +473,7 @@ public class JavaFXApp extends Application {
     }
 
     private String formatCounts() {
-        java.util.Map<String, Integer> counts = engine.counts();
+        java.util.Map<String, Integer> counts = controller.getEngine().counts();
         return String.format("Plants: %d  Herbivores: %d  Carnivores: %d",
             counts.getOrDefault("Plant", 0),
             counts.getOrDefault("Herbivore", 0),
@@ -639,22 +485,22 @@ public class JavaFXApp extends Application {
      */
     private void drawGrid() {
         GraphicsContext g = canvas.getGraphicsContext2D();
-        int cols = engine.grid.getWidth();
-        int rows = engine.grid.getHeight();
+        int cols = controller.getEngine().grid.getWidth();
+        int rows = controller.getEngine().grid.getHeight();
         double w = canvas.getWidth() / cols;
         double h = canvas.getHeight() / rows;
-        if (useImageBackground && gridBackgroundImage != null) {
-            g.drawImage(gridBackgroundImage, 0, 0, canvas.getWidth(), canvas.getHeight());
+        if (controller.isUseImageBackground() && controller.getGridBackgroundImage() != null) {
+            g.drawImage(controller.getGridBackgroundImage(), 0, 0, canvas.getWidth(), canvas.getHeight());
         } else {
             g.setFill(Color.BEIGE);
             g.fillRect(0, 0, canvas.getWidth(), canvas.getHeight());
         }
         for (int y = 0; y < rows; y++) {
             for (int x = 0; x < cols; x++) {
-                java.util.List<Organism> objs = engine.grid.organismsAt(x, y);
+                java.util.List<Organism> objs = controller.getEngine().grid.organismsAt(x, y);
                 if (objs.isEmpty()) continue;
                 String name = objs.get(0).getType();
-                Image img = iconMap.get(name);
+                Image img = controller.getIconMap().get(name);
                 if (img != null) {
                     g.drawImage(img, x * w, y * h, w, h);
                 } else {
@@ -670,9 +516,9 @@ public class JavaFXApp extends Application {
         }
         // If an organism is selected in the list, highlight it with a black border
 
-        Integer selId = selectionManager.getSelectedIdProperty().get();
+        Integer selId = controller.getSelectionManager().getSelectedIdProperty().get();
         if (selId != null) {
-            Organism o = engine.grid.getOrganismById(selId);
+            Organism o = controller.getEngine().grid.getOrganismById(selId);
             if (o != null) {
                 g.setStroke(Color.BLACK);
                 g.setLineWidth(Math.max(1, Math.min(4, (float) (Math.min(w, h) * 0.08))));
@@ -681,7 +527,7 @@ public class JavaFXApp extends Application {
         }
         // Update detail panel based on current selection (moved from click handler)
         if (selId != null) {
-            Organism sel = engine.grid.getOrganismById(selId);
+            Organism sel = controller.getEngine().grid.getOrganismById(selId);
             if (sel != null) {
                 StringBuilder sb = new StringBuilder();
                 sb.append("Type: ").append(sel.getType()).append("\n");
@@ -694,7 +540,7 @@ public class JavaFXApp extends Application {
                 updateDetail = () -> detailLabel.setText(sb.toString());
             } else {
                 // selected organism not found (died/removed) — clear selection and detail
-                selectionManager.clear();
+                controller.getSelectionManager().clear();
                 if (orgListView != null) orgListView.getSelectionModel().clearSelection();
                 detailLabel.setText("Click a cell to view organism details");
                 updateDetail = () -> detailLabel.setText("Click a cell to view organism details");
@@ -702,45 +548,7 @@ public class JavaFXApp extends Application {
         }
     }
 
-    private void loadIcons() {  
-        String[] names = {"Plant", "Herbivore", "Carnivore"};
-        Path[] candidates = new Path[] {
-            Path.of("EcosystemSimulation", "icons"),
-            Path.of("icons")
-        };
-        for (String n : names) {
-            Image found = null;
-            for (Path base : candidates) {
-                Path p = base.resolve(n + ".png");
-                if (Files.exists(p)) {
-                    try {
-                        found = new Image(p.toUri().toString());
-                        break;
-                    } catch (Exception ex) {}
-                }
-                p = base.resolve(n.toLowerCase() + ".png");
-                if (Files.exists(p)) {
-                    try {
-                        found = new Image(p.toUri().toString());
-                        break;
-                    } catch (Exception ex) {}
-                }
-            }
-            if (found != null) iconMap.put(n, found);
-        }
-        Path bgPath = Path.of("EcosystemSimulation", "icons", "grid_background.png");
-        if (Files.exists(bgPath)) {
-            try {
-                gridBackgroundImage = new Image(bgPath.toUri().toString());
-            } catch (Exception ex) { gridBackgroundImage = null; }
-        }
-        Path simBgPath = Path.of("EcosystemSimulation", "icons", "sim_background.png");
-        if (Files.exists(simBgPath)) {
-            try {
-                simRootBackgroundImage = new Image(simBgPath.toUri().toString());
-            } catch (Exception ex) { simRootBackgroundImage = null; }
-        }
-    }
+    
 
     public static void main(String[] args) {
         launch(args);

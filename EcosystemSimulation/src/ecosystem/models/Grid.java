@@ -39,12 +39,12 @@ public class Grid {
 
     // Initialize grid using Settings (from GUI)
     public Grid(Settings s) {
-        this.width = s.gridWidth;
-        this.height = s.gridHeight;
+        this.width = s.getGridWidth();
+        this.height = s.getGridHeight();
         this.organisms = new ArrayList<>();
         this.idIndex = new java.util.HashMap<>();
-        this.plantEnergy = s.plantEnergy;
-        this.plantGrowRate = s.plantGrowRate;
+        this.plantEnergy = s.getPlantEnergy();
+        this.plantGrowRate = s.getPlantGrowRate();
     }
 
     public int getWidth() { return width; }
