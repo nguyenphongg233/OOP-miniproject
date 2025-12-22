@@ -9,13 +9,15 @@ public class SimulationEngine {
     
     private int day = 1;
     private int step = 0;
-    public Grid grid;
+    private Grid grid;
     private boolean verbose = true; // if true, print console output on each tick
 
     public void update_day() {
         // Recalculate day based on step
         this.day = (step / 10) + 1;
     }
+
+    public Grid getGrid() { return grid; }
 
     public void update_organ() {
         // No-op: counts() always reflects current grid

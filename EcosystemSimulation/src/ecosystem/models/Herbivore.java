@@ -14,21 +14,22 @@ public class Herbivore extends Animal {
 
     @Override
     public void step(Grid grid) {
-        age++;
-        Organism plant = grid.findNeighborOfType(x, y, Plant.class);
+        incrementAge();
+        Organism plant = grid.findNeighborOfType(getX(), getY(), Plant.class);
         if (plant != null) {
             grid.removeOrganism(plant);
-            this.energy += eatGain;
+            this.adjustEnergy(eatGain);
         } else {
             this.randomMove(grid);
         }
 
-        if (this.energy >= grid.getHerbivoreReproduceThreshold()) {
-            this.energy = this.energy / 2;
-            List<int[]> empties = grid.getEmptyNeighbors(x, y);
+        if (this.getEnergy() >= grid.getHerbivoreReproduceThreshold()) {
+            int half = this.getEnergy() / 2;
+            this.setEnergy(half);
+            List<int[]> empties = grid.getEmptyNeighbors(getX(), getY());
             if (!empties.isEmpty()) {
                 int[] pos = empties.get(RNG.nextInt(empties.size()));
-                grid.addOrganism(new Herbivore(pos[0], pos[1], this.energy, this.moveCost, this.eatGain));
+                grid.addOrganism(new Herbivore(pos[0], pos[1], this.getEnergy(), this.getMoveCost(), this.eatGain));
             }
         }
     }

@@ -21,11 +21,8 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
-import javafx.stage.Modality;
 import javafx.stage.Stage;
 import javafx.util.Duration;
-import ecosystem.Settings;
-import ecosystem.logic.SimulationEngine;
 import ecosystem.models.Organism;
 import javafx.scene.image.Image;
 import java.nio.file.Files;
@@ -33,13 +30,8 @@ import java.nio.file.Path;
 import javafx.beans.binding.Bindings;
 import javafx.beans.property.IntegerProperty;
 import javafx.beans.property.SimpleIntegerProperty;
-import javafx.beans.property.ObjectProperty;
-import javafx.beans.property.SimpleObjectProperty;
 import javafx.application.Platform;
-import ecosystem.ui.SelectionManager;
 import ecosystem.models.OrganismSnapshot;
-import java.util.HashMap;
-import java.util.Map;
 
 public class JavaFXApp extends Application {
 
@@ -76,14 +68,14 @@ public class JavaFXApp extends Application {
         // Left: Overview + TreeView
         VBox leftPanel = OverviewPanel();
         // Center: Canvas lớn
-        canvas = new Canvas(controller.getEngine().grid.getWidth() * cellSize, controller.getEngine().grid.getHeight() * cellSize);
+        canvas = new Canvas(controller.getEngine().getGrid().getWidth() * cellSize, controller.getEngine().getGrid().getHeight() * cellSize);
         drawGrid();
 
         // Prepare settings dialog action which will reset engine and update UI when applied
         Runnable onSettingsApplied = () -> {
             controller.resetEngine();
-            canvas.setWidth(controller.getEngine().grid.getWidth() * cellSize);
-            canvas.setHeight(controller.getEngine().grid.getHeight() * cellSize);
+            canvas.setWidth(controller.getEngine().getGrid().getWidth() * cellSize);
+            canvas.setHeight(controller.getEngine().getGrid().getHeight() * cellSize);
             overviewGridW.set(controller.getSettings().getGridWidth());
             overviewGridH.set(controller.getSettings().getGridHeight());
             updateSummary.run();
@@ -98,7 +90,7 @@ public class JavaFXApp extends Application {
         HBox controls = createControlPanel(primaryStage, onSettingsApplied);
 
         // Register grid listener to perform incremental updates to the organisms list
-        controller.getEngine().grid.addListener(new ecosystem.models.Grid.GridListener() {
+        controller.getEngine().getGrid().addListener(new ecosystem.models.Grid.GridListener() {
             @Override public void organismAdded(Organism o) {
                 Platform.runLater(() -> {
                     if (orgListView == null) return;
@@ -235,8 +227,8 @@ public class JavaFXApp extends Application {
     private void drawOverview() {
         if (overviewCanvas == null || controller.getEngine() == null) return;
         GraphicsContext g = overviewCanvas.getGraphicsContext2D();
-        int cols = controller.getEngine().grid.getWidth();
-        int rows = controller.getEngine().grid.getHeight();
+        int cols = controller.getEngine().getGrid().getWidth();
+        int rows = controller.getEngine().getGrid().getHeight();
         double w = overviewCanvas.getWidth();
         double h = overviewCanvas.getHeight();
         if (w <= 0 || h <= 0 || cols <= 0 || rows <= 0) return;
@@ -256,7 +248,7 @@ public class JavaFXApp extends Application {
                 // map draw cell to grid coordinate (sample)
                 int gx = (int)((double)rx * cols / drawCols);
                 int gy = (int)((double)ry * rows / drawRows);
-                java.util.List<Organism> objs = controller.getEngine().grid.organismsAt(gx, gy);
+                java.util.List<Organism> objs = controller.getEngine().getGrid().organismsAt(gx, gy);
                 if (objs.isEmpty()) {
                     // empty cell
                     g.setFill(Color.web("#e9efe9"));
@@ -356,7 +348,7 @@ public class JavaFXApp extends Application {
                 javafx.collections.ObservableList<OrganismSnapshot> items = orgListView.getItems();
                 // replace entire list with current organisms (snapshots)
                 java.util.List<OrganismSnapshot> current = new java.util.ArrayList<>();
-                for (Organism o : controller.getEngine().grid.getOrganisms()) current.add(OrganismSnapshot.from(o));
+                for (Organism o : controller.getEngine().getGrid().getOrganisms()) current.add(OrganismSnapshot.from(o));
                 // Keep a stable ordering (by id) so selection doesn't jump around when grid reorders
                 current.sort((a, b) -> Integer.compare(a.id, b.id));
                 // replace entire list with current snapshots while guarding selection updates
@@ -431,8 +423,8 @@ public class JavaFXApp extends Application {
         resetBtn.setOnAction(e -> {
             timeline.stop();
             controller.resetEngine();
-            canvas.setWidth(controller.getEngine().grid.getWidth() * cellSize);
-            canvas.setHeight(controller.getEngine().grid.getHeight() * cellSize);
+            canvas.setWidth(controller.getEngine().getGrid().getWidth() * cellSize);
+            canvas.setHeight(controller.getEngine().getGrid().getHeight() * cellSize);
             updateSummary.run();
             drawGrid();
             statsLabel.setText(formatCounts());
@@ -448,14 +440,14 @@ public class JavaFXApp extends Application {
         canvas.heightProperty().addListener((o, oldV, newV) -> drawGrid());
         canvas.setOnMouseClicked(e -> {
             // compute grid coords using current canvas scale (not fixed cellSize)
-            int cols = controller.getEngine().grid.getWidth();
-            int rows = controller.getEngine().grid.getHeight();
+            int cols = controller.getEngine().getGrid().getWidth();
+            int rows = controller.getEngine().getGrid().getHeight();
             double cellW = canvas.getWidth() / (double) Math.max(1, cols);
             double cellH = canvas.getHeight() / (double) Math.max(1, rows);
             int gx = (int) Math.floor(e.getX() / cellW);
             int gy = (int) Math.floor(e.getY() / cellH);
             if (gx >= 0 && gx < cols && gy >= 0 && gy < rows) {
-                java.util.List<Organism> objs = controller.getEngine().grid.organismsAt(gx, gy);
+                java.util.List<Organism> objs = controller.getEngine().getGrid().organismsAt(gx, gy);
                 if (!objs.isEmpty()) {
                     // select the top organism at the clicked cell (selection manager listener will update list)
                     Organism o = objs.get(0);
@@ -485,8 +477,8 @@ public class JavaFXApp extends Application {
      */
     private void drawGrid() {
         GraphicsContext g = canvas.getGraphicsContext2D();
-        int cols = controller.getEngine().grid.getWidth();
-        int rows = controller.getEngine().grid.getHeight();
+        int cols = controller.getEngine().getGrid().getWidth();
+        int rows = controller.getEngine().getGrid().getHeight();
         double w = canvas.getWidth() / cols;
         double h = canvas.getHeight() / rows;
         if (controller.isUseImageBackground() && controller.getGridBackgroundImage() != null) {
@@ -497,7 +489,7 @@ public class JavaFXApp extends Application {
         }
         for (int y = 0; y < rows; y++) {
             for (int x = 0; x < cols; x++) {
-                java.util.List<Organism> objs = controller.getEngine().grid.organismsAt(x, y);
+                java.util.List<Organism> objs = controller.getEngine().getGrid().organismsAt(x, y);
                 if (objs.isEmpty()) continue;
                 String name = objs.get(0).getType();
                 Image img = controller.getIconMap().get(name);
@@ -518,7 +510,7 @@ public class JavaFXApp extends Application {
 
         Integer selId = controller.getSelectionManager().getSelectedIdProperty().get();
         if (selId != null) {
-            Organism o = controller.getEngine().grid.getOrganismById(selId);
+            Organism o = controller.getEngine().getGrid().getOrganismById(selId);
             if (o != null) {
                 g.setStroke(Color.BLACK);
                 g.setLineWidth(Math.max(1, Math.min(4, (float) (Math.min(w, h) * 0.08))));
@@ -527,7 +519,7 @@ public class JavaFXApp extends Application {
         }
         // Update detail panel based on current selection (moved from click handler)
         if (selId != null) {
-            Organism sel = controller.getEngine().grid.getOrganismById(selId);
+            Organism sel = controller.getEngine().getGrid().getOrganismById(selId);
             if (sel != null) {
                 StringBuilder sb = new StringBuilder();
                 sb.append("Type: ").append(sel.getType()).append("\n");

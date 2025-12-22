@@ -14,24 +14,25 @@ public class Carnivore extends Animal {
 
     @Override
     public void step(Grid grid) {
-        age++;
-        Organism prey = grid.findNeighborOfType(x, y, Herbivore.class);
+        incrementAge();
+        Organism prey = grid.findNeighborOfType(getX(), getY(), Herbivore.class);
         if (prey != null) {
             moveTowards(prey.getX(), prey.getY(), grid);
-            if (this.x == prey.getX() && this.y == prey.getY()) {
+            if (this.getX() == prey.getX() && this.getY() == prey.getY()) {
                 grid.removeOrganism(prey);
-                this.energy += eatGain;
+                this.adjustEnergy(eatGain);
             }
         } else {
             this.randomMove(grid);
         }
 
-        if (this.energy >= grid.getCarnivoreReproduceThreshold()) {
-            this.energy = this.energy / 2;
-            List<int[]> empties = grid.getEmptyNeighbors(x, y);
+        if (this.getEnergy() >= grid.getCarnivoreReproduceThreshold()) {
+            int half = this.getEnergy() / 2;
+            this.setEnergy(half);
+            List<int[]> empties = grid.getEmptyNeighbors(getX(), getY());
             if (!empties.isEmpty()) {
                 int[] pos = empties.get(RNG.nextInt(empties.size()));
-                grid.addOrganism(new Carnivore(pos[0], pos[1], this.energy, this.moveCost, this.eatGain));
+                grid.addOrganism(new Carnivore(pos[0], pos[1], this.getEnergy(), this.getMoveCost(), this.eatGain));
             }
         }
     }

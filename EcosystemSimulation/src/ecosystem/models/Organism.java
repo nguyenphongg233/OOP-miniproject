@@ -29,10 +29,16 @@ public abstract class Organism {
         return age;
     }
 
-    protected int x;
-    protected int y;
-    protected int energy;
-    protected int age;
+    private int x;
+    private int y;
+    private int energy;
+    private int age;
+
+    // Protected helpers for subclasses to modify state safely
+    protected void setPosition(int nx, int ny) { this.x = nx; this.y = ny; }
+    protected void adjustEnergy(int delta) { this.energy += delta; }
+    protected void setEnergy(int e) { this.energy = e; }
+    protected void incrementAge() { this.age++; }
 
     public Organism(int x, int y, int energy) {
         this.id = NEXT_ID.getAndIncrement();
@@ -58,7 +64,7 @@ public abstract class Organism {
     public int getY() { return y; }
 
     public int distanceTo(Organism other) {
-        return Math.abs(this.x - other.x) + Math.abs(this.y - other.y);
+        return Math.abs(this.x - other.getX()) + Math.abs(this.y - other.getY());
     }
 
     @Override
