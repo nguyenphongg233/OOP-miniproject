@@ -1,0 +1,37 @@
+/* Light theme overrides */
+.root {
+    -fx-base: #ffffff;
+    -fx-control-inner-background: #ffffff;
+    -fx-text-base-color: #222222;
+}
+.right-panel {
+    -fx-background-color: linear-gradient(to bottom right, #ffffff, #fbfffb);
+}
+.sim-root {
+    -fx-background-color: linear-gradient(to bottom right, #f7fbf9, #eef6ef);
+}
+.menu-button, .menu-button:hover {
+    -fx-background-color: #69bdacff; -fx-text-fill: white;
+}
+
+/* Keep the top MenuBar area uncolored (transparent) so it looks normal */
+.menu-bar {
+    -fx-background-color: transparent;
+}
+.menu-bar .menu-button {
+    -fx-background-color: transparent;
+    -fx-text-fill: -fx-text-base-color;
+}
+
+/* Light theme tweaks for control bar/buttons */
+.control-bar {
+    -fx-background-color: rgba(255,255,255,0.95);
+}
+
+.control-button {
+    -fx-background-color: linear-gradient(to bottom, #69bdacff, #4fa796ff);
+}
+
+.control-button:hover {
+    -fx-background-color: linear-gradient(to bottom, #70c7b5ff, #50b3a0ff);
+}

@@ -1,0 +1,83 @@
+/* Styles for Ecosystem Simulation UI */
+.root {
+    -fx-font-family: "Segoe UI", Arial, sans-serif;
+}
+.right-panel {
+    -fx-background-color: linear-gradient(to bottom right, #ffffffcc, #f7faf9cc);
+    -fx-padding: 10px;
+    -fx-border-radius: 12px;
+    -fx-background-radius: 12px;
+}
+.sim-canvas {
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.08), 8, 0.2, 0, 2);
+    -fx-border-color: #ddd;
+}
+.sim-root {
+    -fx-background-color: linear-gradient(to bottom right, #f7fbf9, #eaf6ea);
+}
+
+.sim-root .sim-canvas {
+    -fx-background-color: transparent;
+}
+
+/* Bottom control bar and buttons */
+.control-bar {
+    -fx-background-color: rgba(255,255,255,0.9);
+    -fx-background-radius: 18;
+    -fx-padding: 10 14;
+    -fx-spacing: 10;
+    -fx-alignment: center-left;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.12), 10, 0.3, 0, 2);
+}
+
+.control-button {
+    -fx-background-radius: 18;
+    -fx-padding: 8 20;
+    -fx-font-size: 14px;
+    -fx-font-weight: 600;
+    -fx-background-color: linear-gradient(to bottom, #69bdacff, #4fa796ff);
+    -fx-text-fill: white;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.18), 6, 0.4, 0, 1);
+}
+
+.control-button:hover {
+    -fx-background-color: linear-gradient(to bottom, #70c7b5ff, #50b3a0ff);
+}
+
+.control-button:pressed {
+    -fx-translate-y: 1;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.25), 4, 0.5, 0, 0);
+}
+.menu-button {
+    -fx-background-color: #69bdacff; -fx-text-fill: white; -fx-background-radius: 12; -fx-padding: 10 0;
+}
+.legend-label {
+    -fx-font-weight: bold; -fx-padding: 0 6 0 0;
+}
+.prop-box {
+    -fx-background-color: #f5f5f5; -fx-padding: 8; -fx-border-radius: 8; -fx-background-radius: 8;
+}
+.stats-label {
+    -fx-font-weight: 600;
+}
+
+/* Menu bar base styling and layout */
+.menu-bar {
+    -fx-background-color: transparent;
+    -fx-padding: 6 6 6 6;
+}
+.menu-bar .menu {
+    -fx-background-color: transparent;
+    -fx-padding: 6 12;
+    -fx-background-radius: 8;
+    -fx-font-weight: 600;
+}
+.menu-bar .menu:armed {
+    -fx-translate-y: 1;
+}
+.context-menu .menu-item {
+    -fx-padding: 6 12;
+}
+.context-menu .menu-item:hover {
+    -fx-cursor: hand;
+}

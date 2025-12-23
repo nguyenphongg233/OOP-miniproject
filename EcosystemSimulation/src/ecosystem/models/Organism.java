@@ -51,6 +51,15 @@ public abstract class Organism {
     public int getEnergy() {
         return energy;
     }
+
+    /**
+     * Called once per simulated day for every organism.
+     * Default behavior: simply increase age by 1.
+     */
+    public void onDayStart() {
+        incrementAge();
+    }
+
     public abstract void step(Grid grid);
 
     // Type key for rendering / polymorphic behavior (default: class simple name)

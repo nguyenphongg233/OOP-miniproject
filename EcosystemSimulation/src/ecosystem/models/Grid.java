@@ -29,8 +29,13 @@ public class Grid {
     private java.util.Map<Integer, Organism> idIndex;
     private int plantEnergy;
     private double plantGrowRate;
-    private Integer herbivoreReproduceThreshold;
-    private Integer carnivoreReproduceThreshold;
+    // Logical terrain map for each cell (water/sand/grass/rock)
+    private int[][] terrain;
+    // terrain type constants (shared with EnvironmentGenerator)
+    public static final int TERRAIN_WATER = 0;
+    public static final int TERRAIN_SAND  = 1;
+    public static final int TERRAIN_GRASS = 2;
+    public static final int TERRAIN_ROCK  = 3;
     private static final Random RNG = new Random();
 
     public Grid() {
@@ -51,11 +56,42 @@ public class Grid {
     public int getHeight() { return height; }
     public int getPlantEnergy() { return plantEnergy; }
     public double getPlantGrowRate() { return plantGrowRate; }
-    public int getHerbivoreReproduceThreshold() { return herbivoreReproduceThreshold; }
-    public int getCarnivoreReproduceThreshold() { return carnivoreReproduceThreshold; }
 
-    public void setHerbivoreReproduceThreshold(int t) { this.herbivoreReproduceThreshold = t; }
-    public void setCarnivoreReproduceThreshold(int t) { this.carnivoreReproduceThreshold = t; }
+    /** Install or replace the terrain map. Dimensions must match grid size. */
+    public void setTerrain(int[][] terrain) {
+        if (terrain == null) {
+            this.terrain = null;
+            return;
+        }
+        if (terrain.length != width || terrain[0].length != height) {
+            // silently ignore mismatched terrain
+            return;
+        }
+        this.terrain = terrain;
+    }
+
+    /** Expose the current terrain map (may be null). */
+    public int[][] getTerrain() {
+        return terrain;
+    }
+
+    /** Return terrain code at (x,y), defaulting to GRASS if unknown. */
+    public int getTerrainAt(int x, int y) {
+        if (terrain == null || !inBounds(x, y)) return TERRAIN_GRASS;
+        return terrain[x][y];
+    }
+
+    /** True if animals can stand/move on this cell (grass or rock). */
+    public boolean isWalkableTerrain(int x, int y) {
+        int t = getTerrainAt(x, y);
+        return t == TERRAIN_GRASS || t == TERRAIN_ROCK;
+    }
+
+    /** True if plants can grow/survive on this cell (grass only). */
+    public boolean isPlantHabitable(int x, int y) {
+        int t = getTerrainAt(x, y);
+        return t == TERRAIN_GRASS;
+    }
 
     public boolean inBounds(int x, int y) {
         return x >= 0 && x < width && y >= 0 && y < height;
@@ -129,45 +165,98 @@ public class Grid {
     }
 
     public void stepAll() {
-        List<Organism> copy = new ArrayList<>(organisms);
-        for (Organism o : copy) {
-            o.step(this);
-        }
-        // remove dead
-        List<Organism> alive = new ArrayList<>();
-        for (Organism o : organisms) if (o.isAlive()) alive.add(o);
-        // compute changes: removed and updated
-        java.util.Map<Integer, Organism> before = new java.util.HashMap<>();
-        for (Organism o : organisms) before.put(o.getId(), o);
-        java.util.Map<Integer, Organism> after = new java.util.HashMap<>();
-        for (Organism o : alive) after.put(o.getId(), o);
+        // Snapshot organisms at the beginning of the day
+        List<Organism> snapshot = new ArrayList<>(organisms);
 
-        // removed
-        for (Integer id : before.keySet()) {
-            if (!after.containsKey(id)) {
-                Organism removed = before.get(id);
-                for (GridListener l : listeners) {
-                    try { l.organismRemoved(removed); } catch (Exception ex) {}
+        // 1) Day start: age and basal metabolism
+        for (Organism o : snapshot) {
+            o.onDayStart();
+        }
+
+        // 2) Plant growth (spread to 4-neighbor cells) based on starting positions
+        for (Organism o : snapshot) {
+            if (o instanceof Plant && o.isAlive()) {
+                ((Plant)o).dayUpdate(this);
+            }
+        }
+
+        // 3) Collect animals that are still alive after metabolism
+        List<Animal> animals = new ArrayList<>();
+        for (Organism o : snapshot) {
+            if (o instanceof Animal && o.isAlive()) {
+                animals.add((Animal)o);
+            }
+        }
+
+        // 3a) Decide random movement intents (stay vs move) for each animal
+        java.util.Map<Animal, int[]> desiredMoves = new java.util.HashMap<>();
+        for (Animal a : animals) {
+            if (!a.isAlive()) continue;
+            // 50% chance to attempt a move
+            if (RNG.nextBoolean()) {
+                int[] target = a.chooseRandomMoveTarget(this);
+                if (target != null) {
+                    desiredMoves.put(a, target);
                 }
             }
         }
-        // updated (present in after)
-        for (Integer id : after.keySet()) {
-            Organism updated = after.get(id);
-            for (GridListener l : listeners) {
-                try { l.organismUpdated(updated); } catch (Exception ex) {}
+
+        // 3b) Apply movements simultaneously, resolving collisions
+        java.util.Set<String> reservedTargets = new java.util.HashSet<>();
+        for (Animal a : animals) {
+            int[] target = desiredMoves.get(a);
+            if (target == null || !a.isAlive()) continue;
+            int tx = target[0], ty = target[1];
+            String key = tx + "," + ty;
+            // cell must remain empty and not already taken by another mover
+            if (!isCellEmpty(tx, ty)) continue;
+            if (reservedTargets.contains(key)) continue;
+            a.setPosition(tx, ty);
+            a.adjustEnergy(-a.getMoveCost());
+            reservedTargets.add(key);
+        }
+
+        // 4) Eating phase after all movements
+        for (Animal a : animals) {
+            if (!a.isAlive()) continue;
+            if (a instanceof Herbivore) {
+                ((Herbivore)a).eat(this);
+            } else if (a instanceof Carnivore) {
+                ((Carnivore)a).eat(this);
             }
         }
 
+        // 5) Reproduction phase
+        for (Animal a : animals) {
+            if (!a.isAlive()) continue;
+            if (a instanceof Herbivore) {
+                ((Herbivore)a).tryReproduce(this);
+            } else if (a instanceof Carnivore) {
+                ((Carnivore)a).tryReproduce(this);
+            }
+        }
+
+        // 6) Remove dead organisms and rebuild id index
+        List<Organism> alive = new ArrayList<>();
+        for (Organism o : organisms) if (o.isAlive()) alive.add(o);
+
         organisms = alive;
-        // rebuild id index to reflect removals/moves
         idIndex.clear();
         for (Organism o : organisms) idIndex.put(o.getId(), o);
+
+        // Notify listeners that all surviving organisms have been updated this day
+        for (Organism o : organisms) {
+            for (GridListener l : listeners) {
+                try { l.organismUpdated(o); } catch (Exception ex) {}
+            }
+        }
     }
 
     public void populateBasic(int initialPlants, int initialHerbivores, int initialCarnivores,
                               int herbivoreEnergy, int herbivoreMoveCost, int herbivoreEatGain,
-                              int carnivoreEnergy, int carnivoreMoveCost, int carnivoreEatGain) {
+                              int carnivoreEnergy, int carnivoreMoveCost, int carnivoreEatGain,
+                              int herbivoreReproduceThreshold, int herbivoreMetabolismCost, double herbivoreAbsorptionRate,
+                              int carnivoreReproduceThreshold, int carnivoreMetabolismCost, double carnivoreAbsorptionRate) {
         for (int i = 0; i < initialPlants; i++) {
             int x = RNG.nextInt(width);
             int y = RNG.nextInt(height);
@@ -176,13 +265,58 @@ public class Grid {
         for (int i = 0; i < initialHerbivores; i++) {
             int x = RNG.nextInt(width);
             int y = RNG.nextInt(height);
-            addOrganism(new Herbivore(x, y, herbivoreEnergy, herbivoreMoveCost, herbivoreEatGain));
+            addOrganism(new Herbivore(x, y, herbivoreEnergy, herbivoreMoveCost, herbivoreEatGain,
+                herbivoreReproduceThreshold, herbivoreMetabolismCost, herbivoreAbsorptionRate));
         }
         for (int i = 0; i < initialCarnivores; i++) {
             int x = RNG.nextInt(width);
             int y = RNG.nextInt(height);
-            addOrganism(new Carnivore(x, y, carnivoreEnergy, carnivoreMoveCost, carnivoreEatGain));
+            addOrganism(new Carnivore(x, y, carnivoreEnergy, carnivoreMoveCost, carnivoreEatGain,
+                carnivoreReproduceThreshold, carnivoreMetabolismCost, carnivoreAbsorptionRate));
         }
+    }
+
+    /**
+     * After a terrain map has been installed, ensure that initial organisms
+     * are not placed on invalid terrain (e.g. animals in water, plants off grass).
+     * Call this right after setting terrain for a newly created grid.
+     */
+    public void ensureOrganismsOnValidTerrain() {
+        if (terrain == null) return;
+        for (Organism o : organisms) {
+            if (o instanceof Plant) {
+                if (!isPlantHabitable(o.getX(), o.getY())) {
+                    relocateOrganismToValidCell(o, true);
+                }
+            } else if (o instanceof Animal) {
+                if (!isWalkableTerrain(o.getX(), o.getY())) {
+                    relocateOrganismToValidCell(o, false);
+                }
+            }
+        }
+    }
+
+    /**
+     * Move the given organism to a random empty cell that is valid for its type.
+     * If no suitable cell is found within a reasonable number of attempts,
+     * the organism is left at its current position.
+     */
+    private void relocateOrganismToValidCell(Organism o, boolean plant) {
+        if (width <= 0 || height <= 0) return;
+        int maxAttempts = Math.max(100, width * height);
+        for (int attempts = 0; attempts < maxAttempts; attempts++) {
+            int x = RNG.nextInt(width);
+            int y = RNG.nextInt(height);
+            if (!isCellEmpty(x, y)) continue;
+            if (plant) {
+                if (!isPlantHabitable(x, y)) continue;
+            } else {
+                if (!isWalkableTerrain(x, y)) continue;
+            }
+            o.setPosition(x, y);
+            return;
+        }
+        // If we cannot find any valid cell, keep the organism where it is.
     }
 
     public List<String> asciiGrid() {

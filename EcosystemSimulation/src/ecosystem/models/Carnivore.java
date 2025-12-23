@@ -7,32 +7,55 @@ public class Carnivore extends Animal {
     private int eatGain;
     private static final Random RNG = new Random();
 
-    public Carnivore(int x, int y, int energy, int moveCost, int eatGain) {
-        super(x, y, energy, moveCost);
+    public Carnivore(int x, int y, int energy, int moveCost, int eatGain,
+                     int reproduceThreshold, int metabolismCost, double absorptionRate) {
+        super(x, y, energy, moveCost, reproduceThreshold, metabolismCost, absorptionRate);
         this.eatGain = eatGain;
     }
 
     @Override
     public void step(Grid grid) {
-        incrementAge();
+        // Fallback single-organism update (not used in new multi-phase engine):
+        eat(grid);
+        tryReproduce(grid);
+    }
+
+    /** Eating phase: look for a neighboring herbivore and consume it. */
+    public void eat(Grid grid) {
         Organism prey = grid.findNeighborOfType(getX(), getY(), Herbivore.class);
         if (prey != null) {
-            moveTowards(prey.getX(), prey.getY(), grid);
-            if (this.getX() == prey.getX() && this.getY() == prey.getY()) {
-                grid.removeOrganism(prey);
-                this.adjustEnergy(eatGain);
-            }
-        } else {
-            this.randomMove(grid);
+            grid.removeOrganism(prey);
+            int gained = (int)Math.round(eatGain * getAbsorptionRate());
+            if (gained <= 0 && eatGain > 0) gained = 1;
+            this.adjustEnergy(gained);
         }
+    }
 
-        if (this.getEnergy() >= grid.getCarnivoreReproduceThreshold()) {
-            int half = this.getEnergy() / 2;
-            this.setEnergy(half);
+    /** Reproduction phase using individual energy threshold and energy splitting. */
+    public void tryReproduce(Grid grid) {
+        if (this.getEnergy() >= getReproduceThreshold()) {
             List<int[]> empties = grid.getEmptyNeighbors(getX(), getY());
-            if (!empties.isEmpty()) {
-                int[] pos = empties.get(RNG.nextInt(empties.size()));
-                grid.addOrganism(new Carnivore(pos[0], pos[1], this.getEnergy(), this.getMoveCost(), this.eatGain));
+            java.util.List<int[]> walkable = new java.util.ArrayList<>();
+            for (int[] p : empties) {
+                if (grid.isWalkableTerrain(p[0], p[1])) walkable.add(p);
+            }
+            if (!walkable.isEmpty()) {
+                int originalEnergy = this.getEnergy();
+                int parentAfter = originalEnergy / 2;
+                int childEnergy = originalEnergy / 4;
+                if (childEnergy <= 0) return;
+                this.setEnergy(parentAfter);
+                int[] pos = walkable.get(RNG.nextInt(walkable.size()));
+                Carnivore child = new Carnivore(
+                    pos[0], pos[1],
+                    childEnergy,
+                    getMoveCost(),
+                    this.eatGain,
+                    getReproduceThreshold(),
+                    getMetabolismCost(),
+                    getAbsorptionRate()
+                );
+                grid.addOrganism(child);
             }
         }
     }

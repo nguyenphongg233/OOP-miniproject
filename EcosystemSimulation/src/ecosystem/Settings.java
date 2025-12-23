@@ -19,12 +19,17 @@ public class Settings {
     private int herbivoreMoveCost = 1;
     private int herbivoreEatGain = 6;
     private int herbivoreReproduceThreshold = 30;
+    // per-day metabolism cost and absorption rate (0<rate<=1)
+    private int herbivoreMetabolismCost = 1;
+    private double herbivoreAbsorptionRate = 1.0;
 
     // Carnivore params
     private int carnivoreStartEnergy = 30;
     private int carnivoreMoveCost = 2;
     private int carnivoreEatGain = 18;
     private int carnivoreReproduceThreshold = 50;
+    private int carnivoreMetabolismCost = 2;
+    private double carnivoreAbsorptionRate = 1.0;
 
     
     public Settings() {
@@ -56,6 +61,10 @@ public class Settings {
     public void setHerbivoreEatGain(int herbivoreEatGain) { this.herbivoreEatGain = herbivoreEatGain; }
     public int getHerbivoreReproduceThreshold() { return herbivoreReproduceThreshold; }
     public void setHerbivoreReproduceThreshold(int herbivoreReproduceThreshold) { this.herbivoreReproduceThreshold = herbivoreReproduceThreshold; }
+    public int getHerbivoreMetabolismCost() { return herbivoreMetabolismCost; }
+    public void setHerbivoreMetabolismCost(int herbivoreMetabolismCost) { this.herbivoreMetabolismCost = herbivoreMetabolismCost; }
+    public double getHerbivoreAbsorptionRate() { return herbivoreAbsorptionRate; }
+    public void setHerbivoreAbsorptionRate(double herbivoreAbsorptionRate) { this.herbivoreAbsorptionRate = herbivoreAbsorptionRate; }
 
     public int getCarnivoreStartEnergy() { return carnivoreStartEnergy; }
     public void setCarnivoreStartEnergy(int carnivoreStartEnergy) { this.carnivoreStartEnergy = carnivoreStartEnergy; }
@@ -65,4 +74,8 @@ public class Settings {
     public void setCarnivoreEatGain(int carnivoreEatGain) { this.carnivoreEatGain = carnivoreEatGain; }
     public int getCarnivoreReproduceThreshold() { return carnivoreReproduceThreshold; }
     public void setCarnivoreReproduceThreshold(int carnivoreReproduceThreshold) { this.carnivoreReproduceThreshold = carnivoreReproduceThreshold; }
+    public int getCarnivoreMetabolismCost() { return carnivoreMetabolismCost; }
+    public void setCarnivoreMetabolismCost(int carnivoreMetabolismCost) { this.carnivoreMetabolismCost = carnivoreMetabolismCost; }
+    public double getCarnivoreAbsorptionRate() { return carnivoreAbsorptionRate; }
+    public void setCarnivoreAbsorptionRate(double carnivoreAbsorptionRate) { this.carnivoreAbsorptionRate = carnivoreAbsorptionRate; }
 }
