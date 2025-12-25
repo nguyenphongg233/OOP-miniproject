@@ -1,37 +1,50 @@
-/* Light theme overrides */
+/* Light theme: white background + retro pixel style */
 .root {
-    -fx-base: #ffffff;
+    /* giữ font monospace từ styles.css, chỉ đổi màu sáng */
+    -fx-text-base-color: #202020;
     -fx-control-inner-background: #ffffff;
-    -fx-text-base-color: #222222;
-}
-.right-panel {
-    -fx-background-color: linear-gradient(to bottom right, #ffffff, #fbfffb);
-}
-.sim-root {
-    -fx-background-color: linear-gradient(to bottom right, #f7fbf9, #eef6ef);
-}
-.menu-button, .menu-button:hover {
-    -fx-background-color: #69bdacff; -fx-text-fill: white;
+    -fx-background-color: #ffffff;
 }
 
-/* Keep the top MenuBar area uncolored (transparent) so it looks normal */
-.menu-bar {
-    -fx-background-color: transparent;
+.right-panel {
+    -fx-background-color: #f5f5f5;
+    -fx-border-color: #202020;
+    -fx-border-width: 2px;
 }
+
+/* properties box inside right panel should also be light */
+.prop-box {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #d0d0d0;
+    -fx-border-width: 1px;
+}
+
+.menu-bar {
+    -fx-background-color: #ffffff;
+}
+
 .menu-bar .menu-button {
     -fx-background-color: transparent;
-    -fx-text-fill: -fx-text-base-color;
+    -fx-text-fill: #202020;
 }
 
-/* Light theme tweaks for control bar/buttons */
+.menu-button, .menu-button:hover {
+    /* nút menu chính kiểu retro, nền xám nhạt, viền vuông */
+    -fx-background-color: #e0e0e0;
+    -fx-text-fill: #202020;
+    -fx-border-color: #202020;
+    -fx-border-width: 2px;
+}
+
 .control-bar {
-    -fx-background-color: rgba(255,255,255,0.95);
+    -fx-background-color: #f0f0f0;
 }
 
 .control-button {
-    -fx-background-color: linear-gradient(to bottom, #69bdacff, #4fa796ff);
+    -fx-background-color: #e0e0e0;
+    -fx-text-fill: #202020;
 }
 
 .control-button:hover {
-    -fx-background-color: linear-gradient(to bottom, #70c7b5ff, #50b3a0ff);
+    -fx-background-color: #d0d0d0;
 }

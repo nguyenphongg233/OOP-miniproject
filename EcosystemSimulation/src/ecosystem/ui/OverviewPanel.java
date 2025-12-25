@@ -34,7 +34,9 @@ public class OverviewPanel {
             int gh = Math.max(1, overviewGridH.get());
             return w * ((double) gh / (double) gw);
         }, overviewCanvas.widthProperty(), overviewGridW, overviewGridH));
-        overviewCanvas.getGraphicsContext2D().setFill(Color.LIGHTGRAY);
+        // Initial fill; actual colors are chosen in drawOverview() based
+        // on the current theme (light vs dark).
+        overviewCanvas.getGraphicsContext2D().setFill(Color.web("#f0f0f0"));
         overviewCanvas.getGraphicsContext2D().fillRect(0, 0, 160, 160);
         overviewCanvas.widthProperty().addListener((o, oldV, newV) -> drawOverview());
         overviewCanvas.heightProperty().addListener((o, oldV, newV) -> drawOverview());
@@ -78,7 +80,9 @@ public class OverviewPanel {
         double w = overviewCanvas.getWidth();
         double h = overviewCanvas.getHeight();
         if (w <= 0 || h <= 0 || cols <= 0 || rows <= 0) return;
-        g.setFill(Color.web("#f0f0f0"));
+        boolean dark = controller.isDarkTheme();
+        Color bg = dark ? Color.web("#101820") : Color.web("#f0f0f0");
+        g.setFill(bg);
         g.fillRect(0, 0, w, h);
         double cellW = w / cols;
         double cellH = h / rows;
@@ -92,18 +96,37 @@ public class OverviewPanel {
                 int gx = (int)((double)rx * cols / drawCols);
                 int gy = (int)((double)ry * rows / drawRows);
                 java.util.List<Organism> objs = controller.getEngine().getGrid().organismsAt(gx, gy);
-                if (objs.isEmpty()) g.setFill(Color.web("#e9efe9"));
-                else {
+                if (objs.isEmpty()) {
+                    g.setFill(bg);
+                } else {
                     String type = objs.get(0).getType();
-                    switch (type) {
-                        case "Plant": g.setFill(Color.web("#7fbf7f")); break;
-                        case "Herbivore": g.setFill(Color.DARKGRAY); break;
-                        case "Carnivore": g.setFill(Color.BLACK); break;
-                        default: g.setFill(Color.GRAY); break;
+                    if (dark) {
+                        // bright arcade colors on dark background
+                        switch (type) {
+                            case "Plant": g.setFill(Color.web("#3cff3c")); break;
+                            case "Herbivore": g.setFill(Color.web("#ffcc00")); break;
+                            case "Carnivore": g.setFill(Color.web("#ff5555")); break;
+                            default: g.setFill(Color.web("#808080")); break;
+                        }
+                    } else {
+                        // slightly softer but still retro on light theme
+                        switch (type) {
+                            case "Plant": g.setFill(Color.web("#66aa33")); break;
+                            case "Herbivore": g.setFill(Color.web("#cc8800")); break;
+                            case "Carnivore": g.setFill(Color.web("#cc3333")); break;
+                            default: g.setFill(Color.web("#999999")); break;
+                        }
                     }
                 }
                 g.fillRect(rx * drawCellW, ry * drawCellH, drawCellW, drawCellH);
             }
+        }
+
+        // subtle scanlines over the minimap for extra retro feel
+        g.setStroke(Color.color(0, 0, 0, dark ? 0.25 : 0.08));
+        g.setLineWidth(1);
+        for (double y = 0; y < h; y += 2) {
+            g.strokeLine(0, y, w, y);
         }
     }
 }

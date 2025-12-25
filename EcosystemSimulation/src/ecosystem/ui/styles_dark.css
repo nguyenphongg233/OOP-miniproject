@@ -1,37 +1,36 @@
-/* Dark theme overrides */
+/* Dark theme sticks to strong CRT-like contrast */
 .root {
-    -fx-base: #1e1e1e;
-    -fx-control-inner-background: #2a2a2a;
-    -fx-text-base-color: #eaeaea;
-}
-.right-panel {
-    -fx-background-color: linear-gradient(to bottom right, #242424, #2f2f2f);
-}
-.sim-root {
-    -fx-background-color: linear-gradient(to bottom right, #121212, #1c1c1c);
-}
-.menu-button, .menu-button:hover {
-    -fx-background-color: #3a7d75ff; -fx-text-fill: white;
+    -fx-base: #000000;
+    -fx-control-inner-background: #000000;
+    -fx-text-base-color: #e0f8d0;
 }
 
-/* Keep the top MenuBar area uncolored (transparent) so it looks normal */
-.menu-bar {
-    -fx-background-color: transparent;
+.right-panel {
+    -fx-background-color: #080c12;
 }
+
+.menu-button, .menu-button:hover {
+    -fx-background-color: #202830;
+    -fx-text-fill: #e0f8d0;
+}
+
+.menu-bar {
+    -fx-background-color: #000000;
+}
+
 .menu-bar .menu-button {
     -fx-background-color: transparent;
-    -fx-text-fill: -fx-text-base-color;
+    -fx-text-fill: #e0f8d0;
 }
 
-/* Dark theme tweaks for control bar/buttons */
 .control-bar {
-    -fx-background-color: rgba(32,32,32,0.96);
+    -fx-background-color: #080c12;
 }
 
 .control-button {
-    -fx-background-color: linear-gradient(to bottom, #3a7d75ff, #2c5f59ff);
+    -fx-background-color: #202830;
 }
 
 .control-button:hover {
-    -fx-background-color: linear-gradient(to bottom, #40867eff, #2f675fff);
+    -fx-background-color: #2a3644;
 }

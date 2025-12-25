@@ -19,8 +19,10 @@ import javafx.util.Duration;
 import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Queue;
 
 import javafx.beans.property.IntegerProperty;
 import javafx.beans.property.SimpleIntegerProperty;
@@ -55,6 +57,14 @@ public class SimulationUIManager {
     private Label detailLabel;
     private Runnable updateSummary;
     private Runnable updateDetail;
+
+    // Main menu retro background animation (BFS reveal)
+    private Timeline menuBackgroundTimeline;
+    private int menuBgCols = 80;
+    private int menuBgRows = 45;
+    private Color[][] menuBgEnv;
+    private boolean[][] menuBgVisited;
+    private Queue<int[]> menuBgQueue;
 
     public SimulationUIManager(AppController controller) {
         this.controller = controller;
@@ -101,7 +111,18 @@ public class SimulationUIManager {
         // --- File menu actions (New / Open / Save / Save As) ---
         FileChooser chooser = new FileChooser();
         chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("Ecosim files", "*.ecosim", "*.txt"));
-        Menu menuFile = menuBar.getMenus().get(0);
+        // find or create the File menu by name so order doesn't matter
+        Menu menuFile = null;
+        for (Menu m : menuBar.getMenus()) {
+            if ("File".equals(m.getText())) {
+                menuFile = m;
+                break;
+            }
+        }
+        if (menuFile == null) {
+            menuFile = new Menu("File");
+            menuBar.getMenus().add(0, menuFile);
+        }
         MenuItem newItem = new MenuItem("New");
         MenuItem openItem = new MenuItem("Open...");
         MenuItem saveItem = new MenuItem("Save");
@@ -210,6 +231,8 @@ public class SimulationUIManager {
 
         // Center: Canvas lớn
         canvas = new Canvas(controller.getEngine().getGrid().getWidth() * cellSize, controller.getEngine().getGrid().getHeight() * cellSize);
+        // neon frame around the simulation grid (styled via .sim-canvas)
+        canvas.getStyleClass().add("sim-canvas");
         // generate environment & terrain map for initial grid
         EnvironmentGenerator.EnvironmentData initialEnv = EnvironmentGenerator.generateEnvironment(
             controller.getEngine().getGrid().getWidth(),
@@ -278,10 +301,6 @@ public class SimulationUIManager {
         // BorderPane layout
         BorderPane simRoot = new BorderPane();
         simRoot.getStyleClass().add("sim-root");
-        simRoot.setBackground(new Background(new BackgroundFill(
-                Color.BEIGE, CornerRadii.EMPTY, Insets.EMPTY
-        )));
-
         simRoot.setTop(menuBar);
         simRoot.setLeft(leftPanel);
         simRoot.setRight(rightPanel);
@@ -309,7 +328,8 @@ public class SimulationUIManager {
         applyTheme();
 
         // --- Menu Scene ---
-        showMainMenu(primaryStage,
+        MainMenuScreen mainMenu = new MainMenuScreen();
+        mainMenu.show(primaryStage,
             () -> {
                 primaryStage.setScene(simulationScene);
                 primaryStage.setTitle("Ecosystem Simulation (JavaFX)");
@@ -518,79 +538,109 @@ public class SimulationUIManager {
                 g.strokeRect(o.getX() * w, o.getY() * h, w, h);
             }
         }
+
+        // CRT-style horizontal scanlines overlay
+        g.setStroke(Color.color(0, 0, 0, 0.12));
+        g.setLineWidth(1);
+        for (double y = 0; y < canvas.getHeight(); y += 2) {
+            g.strokeLine(0, y, canvas.getWidth(), y);
+        }
     }
 
     private void showMainMenu(Stage stage, Runnable onStart, Runnable onSettings) {
-        StackPane root = new StackPane();
 
-        // Load background image if exists
-        Path bgPath = Path.of("EcosystemSimulation", "icons", "background.png");
-        if (!Files.exists(bgPath)) bgPath = Path.of("icons", "background.png");
-        if (Files.exists(bgPath)) {
-            Image bgImg = new Image(bgPath.toUri().toString());
-            BackgroundImage bg = new BackgroundImage(
-                bgImg,
-                BackgroundRepeat.NO_REPEAT,
-                BackgroundRepeat.NO_REPEAT,
-                BackgroundPosition.CENTER,
-                new BackgroundSize(1.0, 1.0, true, true, false, true)
-            );
-            root.setBackground(new Background(bg));
-        } else {
-            root.setStyle("-fx-background-color: linear-gradient(to bottom,#e0f7fa,#b2ebf2);");
-        }
 
-        VBox menuBox = new VBox(18);
-        menuBox.setAlignment(Pos.CENTER);
-        menuBox.setMaxWidth(340);
 
-        Label title = new Label("Ecosystem Simulation");
-        title.setFont(javafx.scene.text.Font.font("Arial", javafx.scene.text.FontWeight.BOLD, 26));
-        title.setTextFill(Color.web("#3ddfafff"));
-        title.setStyle("-fx-effect: dropshadow(gaussian, #fefefeff, 8, 0.5, 0, 2);");
 
-        Button startBtn = createMenuButton("Start Simulation");
-        Button settingsBtn = createMenuButton("Settings");
-        Button aboutBtn = createMenuButton("About");
-        Button helpBtn = createMenuButton("Help");
-        Button exitBtn = createMenuButton("Exit");
 
-        startBtn.setOnAction(e -> { if (onStart != null) onStart.run(); });
-        settingsBtn.setOnAction(e -> { if (onSettings != null) onSettings.run(); });
-        aboutBtn.setOnAction(e -> showAboutDialog(stage));
-        helpBtn.setOnAction(e -> showHelpDialog(stage));
-        exitBtn.setOnAction(e -> stage.close());
 
-        menuBox.getChildren().addAll(title, startBtn, settingsBtn, aboutBtn, helpBtn, exitBtn);
-        root.getChildren().add(menuBox);
 
-        Scene scene = new Scene(root, 1300, 700);
-        scene.widthProperty().addListener((obs, oldV, newV) -> {
-            double w = newV.doubleValue();
-            double btnW = Math.max(180, Math.min(320, w * 0.45));
-            for (javafx.scene.Node n : menuBox.getChildren()) {
-                if (n instanceof Button) ((Button)n).setPrefWidth(btnW);
-            }
-        });
-        scene.heightProperty().addListener((obs, oldV, newV) -> {
-            double h = newV.doubleValue();
-            menuBox.setSpacing(Math.max(14, Math.min(32, h * 0.04)));
-        });
 
-        stage.setScene(scene);
-        stage.setTitle("Ecosystem Simulation — Main Menu");
-        stage.show();
+
+
     }
 
     private Button createMenuButton(String text) {
-        Button btn = new Button(text);
-        btn.setFont(javafx.scene.text.Font.font("Arial", javafx.scene.text.FontWeight.SEMI_BOLD, 20));
-        btn.setStyle("-fx-background-color: #69bdacff; -fx-text-fill: white; -fx-background-radius: 12; -fx-padding: 10 0; -fx-effect: dropshadow(gaussian, #80cbc4, 6, 0.3, 0, 2);");
-        btn.setPrefHeight(44);
+        Button btn = new Button(text.toUpperCase());
+        btn.setFont(javafx.scene.text.Font.font("Consolas", javafx.scene.text.FontWeight.BOLD, 18));
+        btn.setStyle("-fx-background-color: #202830; -fx-text-fill: #e0f8d0; -fx-background-radius: 0; -fx-padding: 8 0; -fx-border-color: #40c8f4; -fx-border-width: 2;");
+        btn.setPrefHeight(40);
         btn.setMaxWidth(Double.MAX_VALUE);
-        btn.setOnMouseEntered(e -> btn.setStyle("-fx-background-color: #70772cff; -fx-text-fill: white; -fx-background-radius: 12; -fx-padding: 10 0; -fx-effect: dropshadow(gaussian, #b2dfdb, 8, 0.5, 0, 2);"));
-        btn.setOnMouseExited(e -> btn.setStyle("-fx-background-color: #69bdacff; -fx-text-fill: white; -fx-background-radius: 12; -fx-padding: 10 0; -fx-effect: dropshadow(gaussian, #80cbc4, 6, 0.3, 0, 2);"));
+        btn.setOnMouseEntered(e -> btn.setStyle("-fx-background-color: #2a3644; -fx-text-fill: #e0f8d0; -fx-background-radius: 0; -fx-padding: 8 0; -fx-border-color: #40c8f4; -fx-border-width: 2;"));
+        btn.setOnMouseExited(e -> btn.setStyle("-fx-background-color: #202830; -fx-text-fill: #e0f8d0; -fx-background-radius: 0; -fx-padding: 8 0; -fx-border-color: #40c8f4; -fx-border-width: 2;"));
         return btn;
+    }
+
+    /**
+     * Animate a retro environment being revealed by BFS on the main menu.
+     * The animation loops: when all cells have been drawn, a new environment
+     * is generated and the reveal restarts from the center.
+     */
+    private void startMenuBackgroundAnimation(Canvas bgCanvas) {
+        if (menuBackgroundTimeline != null) {
+            menuBackgroundTimeline.stop();
+        }
+
+        GraphicsContext g = bgCanvas.getGraphicsContext2D();
+
+        Runnable initState = () -> {
+            EnvironmentGenerator.EnvironmentData env = EnvironmentGenerator.generateEnvironment(menuBgCols, menuBgRows);
+            menuBgEnv = env.colors;
+            menuBgVisited = new boolean[menuBgCols][menuBgRows];
+            menuBgQueue = new ArrayDeque<>();
+            int sx = menuBgCols / 2;
+            int sy = menuBgRows / 2;
+            menuBgVisited[sx][sy] = true;
+            menuBgQueue.add(new int[]{sx, sy});
+            // clear background
+            g.setFill(Color.BLACK);
+            g.fillRect(0, 0, bgCanvas.getWidth(), bgCanvas.getHeight());
+        };
+
+        initState.run();
+
+        // Slower, more relaxed retro animation
+        menuBackgroundTimeline = new Timeline(new KeyFrame(Duration.millis(80), e -> {
+            if (menuBgEnv == null || menuBgQueue == null) return;
+            double cellW = bgCanvas.getWidth() / (double) menuBgCols;
+            double cellH = bgCanvas.getHeight() / (double) menuBgRows;
+
+            int stepsPerFrame = 40;
+            int processed = 0;
+            while (!menuBgQueue.isEmpty() && processed < stepsPerFrame) {
+                int[] cell = menuBgQueue.poll();
+                int x = cell[0], y = cell[1];
+                Color c = menuBgEnv[x][y];
+                g.setFill(c);
+                g.fillRect(x * cellW, y * cellH, cellW + 1, cellH + 1);
+
+                // enqueue 4-neighbors (BFS)
+                int[][] dirs = {{1,0},{-1,0},{0,1},{0,-1}};
+                for (int[] d : dirs) {
+                    int nx = x + d[0];
+                    int ny = y + d[1];
+                    if (nx >= 0 && nx < menuBgCols && ny >= 0 && ny < menuBgRows && !menuBgVisited[nx][ny]) {
+                        menuBgVisited[nx][ny] = true;
+                        menuBgQueue.add(new int[]{nx, ny});
+                    }
+                }
+                processed++;
+            }
+
+            // if finished, restart with a new environment
+            if (menuBgQueue.isEmpty()) {
+                initState.run();
+            }
+
+            // overlay light scanlines to keep CRT feel
+            g.setStroke(Color.color(0, 0, 0, 0.2));
+            g.setLineWidth(1);
+            for (double y = 0; y < bgCanvas.getHeight(); y += 2) {
+                g.strokeLine(0, y, bgCanvas.getWidth(), y);
+            }
+        }));
+        menuBackgroundTimeline.setCycleCount(Timeline.INDEFINITE);
+        menuBackgroundTimeline.play();
     }
 
     private void showAboutDialog(Stage owner) {

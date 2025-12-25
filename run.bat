@@ -14,8 +14,8 @@ rem Folder .class và resources
 set "CLASS_DIR=%BASE_DIR%out"
 set "RUN_CP=%CLASS_DIR%;%BASE_DIR%EcosystemSimulation\src\ecosystem"
 
-rem Main class
-set "MAIN_CLASS=Ecosystem.src.ecosystem.Main"
+rem Main class (updated to current JavaFX entry)
+set "MAIN_CLASS=ecosystem.ui.JavaFXApp"
 
 rem ==== Chọn java hoặc javaw (ẩn console) ====
 set "JAVA_EXE=javaw"

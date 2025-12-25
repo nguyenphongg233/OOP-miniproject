@@ -24,7 +24,8 @@ public class RightPanel {
         root = new VBox(10);
         root.setPadding(new Insets(8));
         root.setPrefWidth(220);
-        root.setStyle("-fx-font-family: 'Segoe UI', Arial; -fx-font-size: 13;");
+        // Retro pixel look: font is controlled globally via CSS, just
+        // keep spacing here.
 
         Label orgListLabel = new Label("Organisms");
         VBox legend = new VBox(8);
@@ -60,7 +61,8 @@ public class RightPanel {
         orgLabel = new Label();
 
         VBox propBox = new VBox(8);
-        propBox.setStyle("-fx-background-color: #f5f5f5; -fx-padding: 8; -fx-border-radius: 8; -fx-background-radius: 8;");
+        // Styling for this box is defined in styles.css (.prop-box)
+        propBox.getStyleClass().add("prop-box");
         propBox.getChildren().addAll(dayLabel, plantLabel, herbLabel, carnLabel, orgLabel, new Separator(), detailLabel);
 
         root.getChildren().addAll(orgListLabel, legend, orgListView, new Label("Properties"), propBox);
