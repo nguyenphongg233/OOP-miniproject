@@ -1,5 +1,6 @@
 package ecosystem.models;
 
+import java.util.List;
 import java.util.Random;
 
 public class Plant extends Organism {
