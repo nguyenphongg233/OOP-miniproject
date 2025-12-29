@@ -1,3 +1,7 @@
+/**
+ * Generates per-cell environment maps (colors + terrain) used for
+ * background rendering and terrain constraints.
+ */
 package ecosystem.ui;
 
 import javafx.scene.paint.Color;

@@ -46,7 +46,6 @@ public class AppController {
             w.write("\n");
             // engine state
             w.write("day=" + engine.getDay() + "\n");
-            w.write("step=" + engine.getStep() + "\n");
             w.write("\n");
             // organisms: type,x,y,energy,age
             for (ecosystem.models.Organism o : engine.getGrid().getOrganisms()) {
@@ -89,15 +88,14 @@ public class AppController {
                 case "plantGrowRate": s.setPlantGrowRate(Double.parseDouble(v)); break;
             }
         }
-        // parse day/step (step kept for backward compatibility, but day is canonical)
-        int day = 1, step = 0;
+        // parse day
+        int day = 1;
         for (; idx < lines.size(); idx++) {
             String ln = lines.get(idx).trim();
             if (ln.isEmpty()) { idx++; break; }
             String[] kv = ln.split("=", 2);
             if (kv.length < 2) continue;
             if (kv[0].equals("day")) day = Integer.parseInt(kv[1]);
-            if (kv[0].equals("step")) step = Integer.parseInt(kv[1]);
         }
         // remaining lines are organisms
         ecosystem.models.Grid g = new ecosystem.models.Grid(s);
@@ -110,7 +108,6 @@ public class AppController {
             int x = Integer.parseInt(parts[1]);
             int y = Integer.parseInt(parts[2]);
             int energy = Integer.parseInt(parts[3]);
-            int age = Integer.parseInt(parts[4]);
             switch (type) {
                 case "Plant": {
                     ecosystem.models.Plant p = new ecosystem.models.Plant(x, y, energy);
@@ -145,7 +142,7 @@ public class AppController {
         // create engine from grid
         SimulationEngine e = new SimulationEngine(s, g);
         // Each tick is a day now; use saved "day" as the timeline position.
-        e.setStep(day);
+        e.setDay(day);
         // apply new settings and engine
         this.setSettings(s);
         this.setEngine(e);

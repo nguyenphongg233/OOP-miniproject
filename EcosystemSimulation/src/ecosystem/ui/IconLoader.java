@@ -1,3 +1,6 @@
+/**
+ * Loads and caches UI icons for organisms and optional backgrounds.
+ */
 package ecosystem.ui;
 
 import javafx.scene.image.Image;
@@ -29,7 +32,6 @@ public class IconLoader {
         if (Files.exists(bgPath)) {
             try { c.setGridBackgroundImage(new Image(bgPath.toUri().toString())); } catch (Exception ex) { c.setGridBackgroundImage(null); }
         }
-        // Original naming for simulation root background
         Path simBgPath = Path.of("EcosystemSimulation", "icons", "sim_background.png");
         if (Files.exists(simBgPath)) {
             try { c.setSimRootBackgroundImage(new Image(simBgPath.toUri().toString())); } catch (Exception ex) { c.setSimRootBackgroundImage(null); }

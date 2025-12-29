@@ -1,3 +1,6 @@
+/**
+ * Simulation parameters: grid size, organism counts, energy costs/gains, rates.
+ */
 package ecosystem;
 
 public class Settings {

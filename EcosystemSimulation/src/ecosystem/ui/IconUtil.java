@@ -1,3 +1,6 @@
+/**
+ * Utility helpers for ensuring and applying application icons.
+ */
 package ecosystem.ui;
 
 import javafx.scene.image.WritableImage;

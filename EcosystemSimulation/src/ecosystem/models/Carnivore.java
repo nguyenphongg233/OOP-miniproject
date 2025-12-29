@@ -1,3 +1,6 @@
+/**
+ * Carnivore organism: hunts herbivores, balances movement/eating/reproduction.
+ */
 package ecosystem.models;
 
 import java.util.List;

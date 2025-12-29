@@ -1,3 +1,6 @@
+/**
+ * Lightweight, immutable snapshot for safe UI listing/binding of organisms.
+ */
 package ecosystem.models;
 
 public class OrganismSnapshot {

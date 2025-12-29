@@ -1,5 +1,9 @@
+/**
+ * Plant organism: static energy source that spreads/grows.
+ */
 package ecosystem.models;
 
+import java.util.List;
 import java.util.Random;
 
 public class Plant extends Organism {

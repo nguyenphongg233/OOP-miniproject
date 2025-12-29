@@ -1,3 +1,6 @@
+/**
+ * Herbivore organism: moves, eats plants, reproduces under energy threshold.
+ */
 package ecosystem.models;
 
 import java.util.List;

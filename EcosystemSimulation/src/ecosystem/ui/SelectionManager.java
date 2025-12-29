@@ -1,3 +1,6 @@
+/**
+ * Tracks current organism selection via stable IDs; exposes properties for UI binding.
+ */
 package ecosystem.ui;
 
 import javafx.beans.property.ObjectProperty;

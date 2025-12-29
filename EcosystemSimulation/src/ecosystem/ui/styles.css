@@ -1,110 +1,83 @@
-/* Base retro arcade style for the whole app */
+/* Styles for Ecosystem Simulation UI */
 .root {
-    -fx-font-family: "Consolas", "Courier New", monospace;
-    -fx-font-size: 12px;
-    -fx-text-fill: #e0f8d0;
-    -fx-background-color: #000000;
+    -fx-font-family: "Segoe UI", Arial, sans-serif;
 }
-
-.sim-root {
-    /* retro bezel with a thin border around the whole simulation area */
-    -fx-background-color: #000000;
-    -fx-border-color: #40c8f4;
-    -fx-border-width: 2px;
+.right-panel {
+    -fx-background-color: linear-gradient(to bottom right, #ffffffcc, #f7faf9cc);
+    -fx-padding: 10px;
+    -fx-border-radius: 12px;
+    -fx-background-radius: 12px;
 }
-
 .sim-canvas {
-    /* retro pixel-style frame around the main simulation grid */
-    -fx-background-color: #000000;
-    /* outer cyan border + inner darker outline for "pixel" feel */
-    -fx-border-color: #32f6ff, #001018;
-    -fx-border-width: 4, 2;
-    -fx-border-insets: 0, 2;
-    -fx-border-radius: 0;
-    -fx-background-radius: 0;
-    -fx-effect: null;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.08), 8, 0.2, 0, 2);
+    -fx-border-color: #ddd;
+}
+.sim-root {
+    -fx-background-color: linear-gradient(to bottom right, #f7fbf9, #eaf6ea);
 }
 
-/* Bottom control bar and buttons in pixel style */
+.sim-root .sim-canvas {
+    -fx-background-color: transparent;
+}
+
+/* Bottom control bar and buttons */
 .control-bar {
-    -fx-background-color: #101820;
-    -fx-background-radius: 0;
-    -fx-padding: 6 8;
-    -fx-spacing: 8;
+    -fx-background-color: rgba(255,255,255,0.9);
+    -fx-background-radius: 18;
+    -fx-padding: 10 14;
+    -fx-spacing: 10;
     -fx-alignment: center-left;
-    -fx-border-color: #40c8f4;
-    -fx-border-width: 2px 0 0 0;
-    -fx-effect: null;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.12), 10, 0.3, 0, 2);
 }
 
 .control-button {
-    -fx-background-radius: 0;
-    -fx-padding: 4 12;
-    -fx-font-size: 11px;
-    -fx-font-weight: bold;
-    -fx-background-color: #202830;
-    -fx-border-color: #40c8f4;
-    -fx-border-width: 2px;
-    -fx-text-fill: #e0f8d0;
-    -fx-effect: null;
+    -fx-background-radius: 18;
+    -fx-padding: 8 20;
+    -fx-font-size: 14px;
+    -fx-font-weight: 600;
+    -fx-background-color: linear-gradient(to bottom, #69bdacff, #4fa796ff);
+    -fx-text-fill: white;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.18), 6, 0.4, 0, 1);
 }
 
 .control-button:hover {
-    -fx-background-color: #2a3644;
+    -fx-background-color: linear-gradient(to bottom, #70c7b5ff, #50b3a0ff);
 }
 
 .control-button:pressed {
-    -fx-background-color: #141a20;
-    -fx-translate-y: 0;
+    -fx-translate-y: 1;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.25), 4, 0.5, 0, 0);
 }
-
 .menu-button {
-    -fx-background-color: #202830;
-    -fx-text-fill: #e0f8d0;
-    -fx-background-radius: 0;
-    -fx-padding: 8 0;
-    -fx-border-color: #40c8f4;
-    -fx-border-width: 2px;
+    -fx-background-color: #69bdacff; -fx-text-fill: white; -fx-background-radius: 12; -fx-padding: 10 0;
 }
-
 .legend-label {
-    -fx-font-weight: bold;
-    -fx-text-fill: #e0f8d0;
-    -fx-padding: 0 4 0 0;
+    -fx-font-weight: bold; -fx-padding: 0 6 0 0;
 }
-
 .prop-box {
-    -fx-background-color: #101820;
-    -fx-padding: 6;
-    -fx-border-radius: 0;
-    -fx-background-radius: 0;
-    -fx-border-color: #40c8f4;
-    -fx-border-width: 1px;
+    -fx-background-color: #f5f5f5; -fx-padding: 8; -fx-border-radius: 8; -fx-background-radius: 8;
 }
-
 .stats-label {
-    -fx-font-weight: bold;
-    -fx-text-fill: #f8f8f8;
+    -fx-font-weight: 600;
 }
 
 /* Menu bar base styling and layout */
 .menu-bar {
-    -fx-background-color: #000000;
-    -fx-padding: 4 6 4 6;
+    -fx-background-color: transparent;
+    -fx-padding: 6 6 6 6;
 }
-
 .menu-bar .menu {
     -fx-background-color: transparent;
-    -fx-padding: 4 8;
-    -fx-background-radius: 0;
-    -fx-font-weight: bold;
-    -fx-text-fill: #e0f8d0;
+    -fx-padding: 6 12;
+    -fx-background-radius: 8;
+    -fx-font-weight: 600;
 }
-
+.menu-bar .menu:armed {
+    -fx-translate-y: 1;
+}
 .context-menu .menu-item {
-    -fx-padding: 4 10;
+    -fx-padding: 6 12;
 }
-
 .context-menu .menu-item:hover {
     -fx-cursor: hand;
 }
