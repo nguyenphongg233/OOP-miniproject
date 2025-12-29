@@ -1,3 +1,6 @@
+/**
+ * World grid: stores terrain and organisms, provides queries and listeners.
+ */
 package ecosystem.models;
 
 import java.util.ArrayList;

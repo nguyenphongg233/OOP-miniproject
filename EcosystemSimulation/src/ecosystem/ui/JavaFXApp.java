@@ -1,3 +1,6 @@
+/**
+ * JavaFX entry point: delegates to `SimulationUIManager` to keep `start()` minimal.
+ */
 package ecosystem.ui;
 
 import javafx.application.Application;

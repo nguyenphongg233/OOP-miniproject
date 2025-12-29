@@ -1,4 +1,7 @@
 
+/**
+ * Base organism model: common fields/behavior for `Plant`, `Herbivore`, `Carnivore`.
+ */
 package ecosystem.models;
 
 import java.util.concurrent.atomic.AtomicInteger;

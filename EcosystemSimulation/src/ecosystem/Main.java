@@ -1,3 +1,6 @@
+/**
+ * Program entry: configures controller/UI and launches the JavaFX app.
+ */
 package ecosystem;
 import javafx.application.Application;
 import ecosystem.ui.JavaFXApp;

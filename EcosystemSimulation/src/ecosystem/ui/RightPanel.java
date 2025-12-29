@@ -1,3 +1,6 @@
+/**
+ * Right-side details: organisms list, selection details, and summary stats.
+ */
 package ecosystem.ui;
 
 import javafx.collections.ObservableList;

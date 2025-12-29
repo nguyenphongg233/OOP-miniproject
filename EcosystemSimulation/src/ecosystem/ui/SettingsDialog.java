@@ -1,3 +1,6 @@
+/**
+ * Modal settings dialog: allows tweaking `Settings` and applies changes via callback.
+ */
 package ecosystem.ui;
 
 import javafx.geometry.Insets;

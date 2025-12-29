@@ -1,3 +1,7 @@
+/**
+ * UI orchestrator: builds main menu and simulation scenes,
+ * handles environment rendering, controls, and selection updates.
+ */
 package ecosystem.ui;
 
 import javafx.animation.KeyFrame;
@@ -17,8 +21,6 @@ import javafx.stage.FileChooser;
 import javafx.util.Duration;
 
 import java.io.File;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -39,11 +41,18 @@ public class SimulationUIManager {
 
     private int cellSize = 20;
     private Timeline timeline;
+    private Timeline menuTimeline;
+    // removed legacy menuTimeline; use menuScanTimeline for menu animation
+    private Timeline menuScanTimeline;
     private Scene menuScene;
     private Scene simulationScene;
     private File currentFile = null;
     private List<File> recentFiles = new ArrayList<>();
     private Canvas canvas;
+    private Canvas menuCanvas;
+    private Color[][] menuEnvColors;
+    private int menuScanRow;
+    private boolean menuScanDown;
     private IntegerProperty overviewGridW = new SimpleIntegerProperty(0);
     private IntegerProperty overviewGridH = new SimpleIntegerProperty(0);
     private Label statsLabel;
@@ -72,23 +81,8 @@ public class SimulationUIManager {
         try { IconUtil.ensureAppIcons(primaryStage); } catch (Exception ex) { /* ignore */ }
 
         // MenuBar (Top)
-        MenuBar menuBar = MenuFactory.createMenuBar(controller, this::drawGrid, this::applyTheme);
-        // Add "Regenerate Environment" into the View menu
-        for (Menu m : menuBar.getMenus()) {
-            if ("View".equals(m.getText())) {
-                MenuItem regen = new MenuItem("Regenerate Environment");
-                regen.setOnAction(ev -> {
-                    int cols = controller.getEngine().getGrid().getWidth();
-                    int rows = controller.getEngine().getGrid().getHeight();
-                    EnvironmentGenerator.EnvironmentData env = EnvironmentGenerator.generateEnvironment(cols, rows);
-                    envMap = env.colors;
-                    controller.getEngine().getGrid().setTerrain(env.terrain);
-                    drawGrid();
-                });
-                m.getItems().add(0, regen);
-                break;
-            }
-        }
+
+        MenuBar menuBar = MenuFactory.createMenuBar(controller, this::drawGrid, this::applyTheme, this::regenerateEnvironment);
 
         // Extracted panels: create instances early so file-menu handlers can call update routines
         OverviewPanel overviewPanel = new OverviewPanel(controller);
@@ -421,6 +415,15 @@ public class SimulationUIManager {
             counts.getOrDefault("Carnivore", 0));
     }
 
+    private void regenerateEnvironment() {
+        int cols = controller.getEngine().getGrid().getWidth();
+        int rows = controller.getEngine().getGrid().getHeight();
+        EnvironmentGenerator.EnvironmentData env = EnvironmentGenerator.generateEnvironment(cols, rows);
+        envMap = env.colors;
+        controller.getEngine().getGrid().setTerrain(env.terrain);
+        drawGrid();
+    }
+
     private void drawGrid() {
         if (canvas == null || controller.getEngine() == null) return;
         GraphicsContext g = canvas.getGraphicsContext2D();
@@ -522,23 +525,11 @@ public class SimulationUIManager {
 
     private void showMainMenu(Stage stage, Runnable onStart, Runnable onSettings) {
         StackPane root = new StackPane();
-
-        // Load background image if exists
-        Path bgPath = Path.of("EcosystemSimulation", "icons", "background.png");
-        if (!Files.exists(bgPath)) bgPath = Path.of("icons", "background.png");
-        if (Files.exists(bgPath)) {
-            Image bgImg = new Image(bgPath.toUri().toString());
-            BackgroundImage bg = new BackgroundImage(
-                bgImg,
-                BackgroundRepeat.NO_REPEAT,
-                BackgroundRepeat.NO_REPEAT,
-                BackgroundPosition.CENTER,
-                new BackgroundSize(1.0, 1.0, true, true, false, true)
-            );
-            root.setBackground(new Background(bg));
-        } else {
-            root.setStyle("-fx-background-color: linear-gradient(to bottom,#e0f7fa,#b2ebf2);");
-        }
+        // Animated environment background
+        menuCanvas = new Canvas(1300, 700);
+        menuCanvas.widthProperty().bind(root.widthProperty());
+        menuCanvas.heightProperty().bind(root.heightProperty());
+        root.getChildren().add(menuCanvas);
 
         VBox menuBox = new VBox(18);
         menuBox.setAlignment(Pos.CENTER);
@@ -555,14 +546,48 @@ public class SimulationUIManager {
         Button helpBtn = createMenuButton("Help");
         Button exitBtn = createMenuButton("Exit");
 
-        startBtn.setOnAction(e -> { if (onStart != null) onStart.run(); });
+        startBtn.setOnAction(e -> { if (menuTimeline != null) menuTimeline.stop(); if (onStart != null) onStart.run(); });
         settingsBtn.setOnAction(e -> { if (onSettings != null) onSettings.run(); });
         aboutBtn.setOnAction(e -> showAboutDialog(stage));
         helpBtn.setOnAction(e -> showHelpDialog(stage));
-        exitBtn.setOnAction(e -> stage.close());
+        exitBtn.setOnAction(e -> { if (menuTimeline != null) menuTimeline.stop(); stage.close(); });
 
         menuBox.getChildren().addAll(title, startBtn, settingsBtn, aboutBtn, helpBtn, exitBtn);
         root.getChildren().add(menuBox);
+
+        // Scanning animation: regenerate env then reveal rows top→bottom or bottom→top slowly
+        Runnable[] startScanHolder = new Runnable[1];
+        startScanHolder[0] = () -> {
+            double w = Math.max(1, menuCanvas.getWidth());
+            double h = Math.max(1, menuCanvas.getHeight());
+            int cols = Math.max(24, (int)Math.round(w / 22));
+            int rows = Math.max(14, (int)Math.round(h / 22));
+            EnvironmentGenerator.EnvironmentData env = EnvironmentGenerator.generateEnvironment(cols, rows);
+            menuEnvColors = env.colors;
+            // clear canvas before scan
+            GraphicsContext g = menuCanvas.getGraphicsContext2D();
+            g.setFill(Color.web("#000000ff"));
+            g.fillRect(0, 0, menuCanvas.getWidth(), menuCanvas.getHeight());
+            // randomize direction
+            menuScanDown = Math.random() < 0.5;
+            menuScanRow = menuScanDown ? 0 : rows - 1;
+            if (menuScanTimeline != null) menuScanTimeline.stop();
+            menuScanTimeline = new Timeline(new KeyFrame(Duration.millis(70), e2 -> {
+                drawMenuEnvironmentRow(menuCanvas, menuEnvColors, menuScanRow);
+                menuScanRow += menuScanDown ? 1 : -1;
+                if (menuScanRow < 0 || menuScanRow >= rows) {
+                    // add gentle overlay and pause before next scan
+                    drawMenuOverlay(menuCanvas);
+                    menuScanTimeline.stop();
+                    Timeline pause = new Timeline(new KeyFrame(Duration.millis(800), ee -> startScanHolder[0].run()));
+                    pause.setCycleCount(1);
+                    pause.play();
+                }
+            }));
+            menuScanTimeline.setCycleCount(Timeline.INDEFINITE);
+            menuScanTimeline.play();
+        };
+        startScanHolder[0].run();
 
         Scene scene = new Scene(root, 1300, 700);
         scene.widthProperty().addListener((obs, oldV, newV) -> {
@@ -580,6 +605,29 @@ public class SimulationUIManager {
         stage.setScene(scene);
         stage.setTitle("Ecosystem Simulation — Main Menu");
         stage.show();
+    }
+
+    private void drawMenuEnvironmentRow(Canvas c, Color[][] colors, int rowIndex) {
+        if (c == null || colors == null || rowIndex < 0) return;
+        int cols = colors.length;
+        int rows = cols > 0 ? colors[0].length : 0;
+        if (cols == 0 || rows == 0 || rowIndex >= rows) return;
+        GraphicsContext g = c.getGraphicsContext2D();
+        double cellW = c.getWidth() / (double) cols;
+        double cellH = c.getHeight() / (double) rows;
+        for (int x = 0; x < cols; x++) {
+            g.setFill(colors[x][rowIndex]);
+            g.fillRect(x * cellW, rowIndex * cellH, cellW, cellH);
+        }
+    }
+
+    private void drawMenuOverlay(Canvas c) {
+        GraphicsContext g = c.getGraphicsContext2D();
+        g.setStroke(Color.color(0,0,0,0.06));
+        g.setLineWidth(1);
+        for (double yy = 0; yy < c.getHeight(); yy += 3) {
+            g.strokeLine(0, yy, c.getWidth(), yy);
+        }
     }
 
     private Button createMenuButton(String text) {

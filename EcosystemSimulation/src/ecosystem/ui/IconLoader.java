@@ -1,3 +1,6 @@
+/**
+ * Loads and caches UI icons for organisms and optional backgrounds.
+ */
 package ecosystem.ui;
 
 import javafx.scene.image.Image;

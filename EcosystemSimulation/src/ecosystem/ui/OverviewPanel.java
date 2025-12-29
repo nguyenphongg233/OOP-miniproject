@@ -1,3 +1,6 @@
+/**
+ * Left-side overview: mini-map rendering and layer tree view.
+ */
 package ecosystem.ui;
 
 import javafx.beans.binding.Bindings;

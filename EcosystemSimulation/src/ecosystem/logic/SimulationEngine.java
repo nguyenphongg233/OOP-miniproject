@@ -1,4 +1,8 @@
     // ...existing code...
+/**
+ * Core simulation loop and rules: advances time, updates organisms,
+ * coordinates with `Grid` for movement/eating/reproduction.
+ */
 package ecosystem.logic;
 
 import ecosystem.Settings;
@@ -8,14 +12,11 @@ public class SimulationEngine {
         // Explicit update methods for UI sync
     
     private int day = 1;
-    // "step" is now equivalent to day; we keep it only for save/load compatibility.
-    private int step = 0;
     private Grid grid;
     private boolean verbose = true; // if true, print console output on each tick
 
     public void update_day() {
-        // Each tick is now one full day; no sub-steps.
-        this.day = step;
+        // No-op: day is incremented in tick()
     }
 
     public Grid getGrid() { return grid; }
@@ -71,22 +72,16 @@ public class SimulationEngine {
     public void tick() {
         // One tick == one simulation day
         this.grid.stepAll();
-        step++;
-        update_day();
+        day++;
         update_organ();
         if (verbose) renderConsole();
     }
     public int getDay() {
         return day;
     }
-    public int getStep() {
-        return step;
-    }
 
-    public void setStep(int s) {
-        this.step = s;
-        // Keep day and step in sync (no 10-steps-per-day logic anymore)
-        this.day = s;
+    public void setDay(int d) {
+        this.day = d;
     }
 
     private void renderConsole() {
