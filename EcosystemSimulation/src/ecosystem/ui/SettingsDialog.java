@@ -9,7 +9,7 @@ import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
-import ecosystem.Settings;
+import ecosystem.models.Settings;
 
 public class SettingsDialog {
     public static void open(Stage owner, AppController c, Runnable onApplied) {

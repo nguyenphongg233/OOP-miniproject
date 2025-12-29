@@ -39,7 +39,7 @@ public class Grid {
     private static final Random RNG = new Random();
 
     public Grid() {
-        this(new ecosystem.Settings());
+        this(new Settings());
     }
 
     // Initialize grid using Settings (from GUI)

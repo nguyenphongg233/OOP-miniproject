@@ -1,7 +1,7 @@
     // ...existing code...
 package ecosystem.logic;
 
-import ecosystem.Settings;
+import ecosystem.models.Settings;
 import ecosystem.models.Grid;
 
 public class SimulationEngine {
@@ -37,7 +37,7 @@ public class SimulationEngine {
     }
 
     public SimulationEngine(Settings s, boolean verbose) {
-        this.grid = new Grid(s);
+        this.grid = new Grid(s.getGridWidth(), s.getGridHeight(), s);
         this.verbose = verbose;
         this.grid.populateBasic(
             s.getInitialPlants(),

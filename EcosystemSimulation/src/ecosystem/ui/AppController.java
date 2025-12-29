@@ -1,7 +1,7 @@
 package ecosystem.ui;
 
 import javafx.scene.image.Image;
-import ecosystem.Settings;
+import ecosystem.models.Settings;
 import ecosystem.logic.SimulationEngine;
 
 import java.util.HashMap;
@@ -100,7 +100,7 @@ public class AppController {
             if (kv[0].equals("step")) step = Integer.parseInt(kv[1]);
         }
         // remaining lines are organisms
-        ecosystem.models.Grid g = new ecosystem.models.Grid(s);
+        ecosystem.models.Grid g = new ecosystem.models.Grid();
         for (; idx < lines.size(); idx++) {
             String ln = lines.get(idx).trim();
             if (ln.isEmpty()) continue;

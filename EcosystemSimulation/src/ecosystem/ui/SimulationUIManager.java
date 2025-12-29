@@ -132,7 +132,7 @@ public class SimulationUIManager {
 
         newItem.setOnAction(e -> {
             if (timeline != null) timeline.stop();
-            controller.setSettings(new ecosystem.Settings());
+            controller.setSettings(new ecosystem.models.Settings());
             controller.setEngine(new ecosystem.logic.SimulationEngine(controller.getSettings()));
             controller.getSelectionManager().clear();
             canvas.setWidth(controller.getEngine().getGrid().getWidth() * cellSize);
